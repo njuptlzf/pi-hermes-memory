@@ -10,7 +10,12 @@
       "change": "AGENT_ROOT splits into storageRoot (per scope, injected) and runtimeRoot (global, for pi module discovery); resolveAgentRoot stays as the runtime-root default",
       "reason": "The whole point of the fork: one directory per (user, sub-scope), chosen by the host.",
       "risk": "edit",
-      "anchors": ["AGENT_ROOT", "resolveAgentRoot", "resolveProjectsRoot", "normalizeProjectsMemoryDir"],
+      "anchors": [
+        "AGENT_ROOT",
+        "resolveAgentRoot",
+        "resolveProjectsRoot",
+        "normalizeProjectsMemoryDir"
+      ],
       "baseBlob": "ccc1b7183731564d1bc9b723f89abe375237a682"
     },
     {
@@ -20,7 +25,11 @@
       "change": "adds defaultMemoryConfig() — a pure copy of the built-in defaults, no file/env read — so a host that owns configuration (an in-process multi-tenant server) never calls loadConfig(); the root itself is not threaded yet",
       "reason": "loadConfig() resolves a JSON file under the agent root, which is one tenant's file becoming every tenant's config. 2 of the 27 AGENT_ROOT references still to thread.",
       "risk": "edit",
-      "anchors": ["AGENT_ROOT", "DEFAULT_CONFIG_PATH", "loadConfig"],
+      "anchors": [
+        "AGENT_ROOT",
+        "DEFAULT_CONFIG_PATH",
+        "loadConfig"
+      ],
       "baseBlob": "13445e3a7f32aec9d5130b746337a4152c046abf"
     },
     {
@@ -30,7 +39,11 @@
       "change": "adds closeHandle() — close this coordinator's pinned connection only, next to the existing process-wide closeHandles()",
       "reason": "Per-tenant erasure: Windows refuses to remove the tenant directory while .pi-hermes-locks.sqlite is open, and closeHandles() would drop every other tenant's connection to erase one.",
       "risk": "edit",
-      "anchors": ["AtomicLockCoordinator", "closeHandles", "discardCachedDb"],
+      "anchors": [
+        "AtomicLockCoordinator",
+        "closeHandles",
+        "discardCachedDb"
+      ],
       "baseBlob": "aa18e48a1f2b05155c96551ee903c9b326035f5d"
     },
     {
@@ -70,7 +83,9 @@
       "change": "wrap the existing default export in an option-taking factory, e.g. createScopedHermesMemory({ storageRoot })",
       "reason": "Entry is already a per-run factory; wrapping from outside keeps upstream's function body intact (avoids the same-function-body conflict class).",
       "risk": "wrap",
-      "anchors": ["export default function"],
+      "anchors": [
+        "export default function"
+      ],
       "baseBlob": "3b3b080aa45f680ced0d94bd92c234713829c231"
     },
     {
@@ -80,7 +95,10 @@
       "change": "SESSIONS_DIR (import-time constant, line 14) becomes lazy / parameter-supplied",
       "reason": "1 of the 2 import-time constants; must not resolve at import time or the fork cannot honour a per-run root.",
       "risk": "edit",
-      "anchors": ["SESSIONS_DIR", "AGENT_ROOT"],
+      "anchors": [
+        "SESSIONS_DIR",
+        "AGENT_ROOT"
+      ],
       "baseBlob": "21b7ea13b6bc40adb58328fc5bf536452e8e9bfb"
     },
     {
@@ -90,7 +108,10 @@
       "change": "DEFAULT_SESSIONS_DIR (import-time constant, line 30) becomes lazy / parameter-supplied",
       "reason": "The second import-time constant; already has an options.sessionsDir override to hook into.",
       "risk": "edit",
-      "anchors": ["DEFAULT_SESSIONS_DIR", "sessionsDir"],
+      "anchors": [
+        "DEFAULT_SESSIONS_DIR",
+        "sessionsDir"
+      ],
       "baseBlob": "85d1008109332173d0c83008379e53ee70fd338f"
     },
     {
@@ -100,7 +121,9 @@
       "change": "storage root threaded in instead of read from AGENT_ROOT",
       "reason": "Bypasses config today; 2 references.",
       "risk": "edit",
-      "anchors": ["AGENT_ROOT"],
+      "anchors": [
+        "AGENT_ROOT"
+      ],
       "baseBlob": "d22419ece25d2090af172c1bf184d6be0f90b772"
     },
     {
@@ -110,7 +133,9 @@
       "change": "lock directory derived from the injected root, never from a process-global",
       "reason": "Two scopes in one process must not share a consolidation lock; a global setter would also cross directories under concurrency.",
       "risk": "edit",
-      "anchors": ["AGENT_ROOT"],
+      "anchors": [
+        "AGENT_ROOT"
+      ],
       "baseBlob": "bb0ca22960e6bfb5b9986f5828e50f0773d4eff5"
     },
     {
@@ -120,7 +145,9 @@
       "change": "root parameter instead of AGENT_ROOT",
       "reason": "4 references, the densest consumer after paths.ts.",
       "risk": "edit",
-      "anchors": ["AGENT_ROOT"],
+      "anchors": [
+        "AGENT_ROOT"
+      ],
       "baseBlob": "41d2cf338b1c4db534ab5d936c36a5cfc6984ce7"
     },
     {
@@ -130,7 +157,9 @@
       "change": "keep runtime module-discovery root on the global AGENT_ROOT (line 239); only memory storage follows the scope",
       "reason": "Dual-root hazard: scoping this root would break pi module discovery for every session.",
       "risk": "edit",
-      "anchors": ["AGENT_ROOT"],
+      "anchors": [
+        "AGENT_ROOT"
+      ],
       "baseBlob": "02a89a71273931d84f42846a6f8caf463056dee8"
     },
     {
@@ -140,7 +169,9 @@
       "change": "root parameter instead of AGENT_ROOT",
       "reason": "1 reference; single-line surface.",
       "risk": "edit",
-      "anchors": ["AGENT_ROOT"],
+      "anchors": [
+        "AGENT_ROOT"
+      ],
       "baseBlob": "2dd1506a44b3f11a837a70b3b2dad9b6f175b94e"
     },
     {
@@ -150,17 +181,21 @@
       "change": "buildMemoryTargetRoutingGuidance() (line 230) rewritten to scope-relative wording instead of user/memory/failure global targets",
       "reason": "This one function is what teaches the model to write outside the scope; it is the only prompt-side change needed.",
       "risk": "edit",
-      "anchors": ["buildMemoryTargetRoutingGuidance"],
+      "anchors": [
+        "buildMemoryTargetRoutingGuidance"
+      ],
       "baseBlob": "71db9f0174d08339d8b901cee1c498a0c0df4acc"
     },
     {
       "path": "package.json",
       "status": "applied",
       "surface": "npm scripts",
-      "change": "adds upstream:check / upstream:check:ci scripts only; package name, version, deps untouched",
+      "change": "adds upstream:check scripts, a build script (tsc -p tsconfig.json), the scoped package name (@njuptlzf/pi-hermes-memory) and conditional exports (agent-chat-source -> src, default -> dist)",
       "reason": "The gate needs an entry point; scripts-only edits merge trivially.",
       "risk": "edit",
-      "anchors": ["\"scripts\""],
+      "anchors": [
+        "\"scripts\""
+      ],
       "baseBlob": "35289a9336d4e407fa1825e0083528f78e538ead"
     },
     {
@@ -209,6 +244,26 @@
       "surface": "CI guard",
       "change": "runs the gate on every push/PR to main",
       "reason": "Fork-owned file; upstream CI does not know this path.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "src/scoped/provider.ts",
+      "status": "applied",
+      "surface": "scoped entry",
+      "change": "host-neutral provider descriptor: id/version/open, selfInjects=false; the module a host loads from configuration",
+      "reason": "Fork-owned file. This is the npm-facing entry for external registration: a host imports it by package specifier and never links against the fork build.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "tests/scoped/provider.test.ts",
+      "status": "applied",
+      "surface": "scoped entry",
+      "change": "4 cases: id/version drift vs package.json, host-owned prompt, tool mount + single-tenant erasure, root validation",
+      "reason": "Fork-owned file. Version drift between package.json and the descriptor is exactly how a host ends up reporting the wrong engine version.",
       "risk": "new",
       "anchors": [],
       "baseBlob": null

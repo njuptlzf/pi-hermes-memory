@@ -158,3 +158,56 @@ and that a neighbouring tenant's file survives.
 | Fork-owned files added | 10 |
 | Engine files whose **existing** lines changed | 0 — all three edits are additions |
 | Hunks inside functions upstream edits | 0 |
+
+---
+
+## 7. Packaging: the host consumes an npm package, not a source link
+
+The host depends on a package, so the fork has to be consumable without a
+TypeScript loader in the host's build. Three changes, all fork-owned:
+
+| Change | Why |
+| --- | --- |
+| package name → `@njuptlzf/pi-hermes-memory` | the unscoped `pi-hermes-memory` on npm is upstream's; a fork publishing under it would either fail or shadow it |
+| `exports` becomes conditional: `agent-chat-source` → `src/*.ts`, `default` → `dist/*.js` | matches the host repo's own convention: their tsc resolves source, their runtime loads `dist` |
+| `build` / `prepack` scripts (`tsc -p tsconfig.json`) | `dist` is a build artifact, so it is produced at pack time and never committed (`dist/` stays gitignored) |
+
+Verified end to end without a registry account, using the same code path a
+registry install uses:
+
+```bash
+npm pack                        # -> njuptlzf-pi-hermes-memory-0.11.0-scoped.1.tgz
+cd /tmp/npm-consumer && npm install /path/to/that.tgz
+node -e "import('@njuptlzf/pi-hermes-memory/scoped-provider').then(m => m.default.open({ storageRoot }))"
+# -> hermes-scoped 0.11.0-scoped.1, selfInjects: false, section 4114 chars, erase: true
+```
+
+That run used plain `node`, no `tsx`, no TypeScript in the host — which is the
+actual requirement. Publishing itself is the only remaining step and it is not
+a code change: `.github/workflows/publish.yml` already publishes on tag via OIDC
+trusted publishing, so a tag from this fork publishes the scoped name.
+
+Version discipline: `PROVIDER_VERSION` in `src/scoped/provider.ts` must equal
+`package.json`'s `version`, and `tests/scoped/provider.test.ts` asserts it. A
+release that bumps one and forgets the other makes the host report the wrong
+engine version in its own logs, which is worse than not reporting one.
+
+The host then declares it from the product side — no server code, one line of
+manifest plus a three-line adapter file:
+
+```yaml
+agent:
+  memory:
+    provider: hermes-scoped
+  memoryProviders:
+    - ./memory/hermes-scoped.ts     # file inside the product dir, or a package specifier
+```
+
+## Diff counters after this slice
+
+| Counter | Value |
+| --- | --- |
+| Upstream files modified | 3 (`package.json`, `src/config.ts`, `src/store/atomic-lock-coordinator.ts`) |
+| Fork-owned files added | 12 |
+| Engine files whose **existing** lines changed | 0 — all edits are additions |
+| Hunks inside functions upstream edits | 0 |

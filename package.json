@@ -1,17 +1,31 @@
 {
-  "name": "pi-hermes-memory",
-  "version": "0.11.0",
+  "name": "@njuptlzf/pi-hermes-memory",
+  "version": "0.11.0-scoped.1",
   "description": "🧠 Persistent memory + 🔍 session search + 🛡️ secret scanning for Pi. Token-aware policy-only memory by default, SQLite FTS5 search, auto-consolidation, procedural skills. 732 tests. Ported from Hermes agent.",
   "type": "module",
   "main": "src/index.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./scoped": "./src/scoped/entry.ts",
+    ".": {
+      "agent-chat-source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./scoped": {
+      "agent-chat-source": "./src/scoped/entry.ts",
+      "types": "./dist/scoped/entry.d.ts",
+      "default": "./dist/scoped/entry.js"
+    },
+    "./scoped-provider": {
+      "agent-chat-source": "./src/scoped/provider.ts",
+      "types": "./dist/scoped/provider.d.ts",
+      "default": "./dist/scoped/provider.js"
+    },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "files": [
     "src",
+    "dist",
     "scripts",
     "README.md",
     "LICENSE",
@@ -28,7 +42,9 @@
     "check:production": "node scripts/check-production-install.mjs",
     "test": "node scripts/ensure-dev.mjs test && tests/run-all.sh",
     "upstream:check": "node scripts/upstream-divergence.mjs",
-    "upstream:check:ci": "node scripts/upstream-divergence.mjs --no-fetch --no-color"
+    "upstream:check:ci": "node scripts/upstream-divergence.mjs --no-fetch --no-color",
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build"
   },
   "keywords": [
     "pi-package",
