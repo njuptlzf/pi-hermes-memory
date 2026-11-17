@@ -267,6 +267,76 @@
       "risk": "new",
       "anchors": [],
       "baseBlob": null
+    },
+    {
+      "path": "src/scoped/policy.ts",
+      "status": "applied",
+      "surface": "scoped entry",
+      "change": "capability-aware policy prompt: every sentence is true of the assembly that emits it (no global layer, no project target, no unmounted tool)",
+      "reason": "Fork-owned file. Upstream policy text is written for a single-user CLI; in a tenant it advertised a project target with no store and a memory_search tool that is not mounted.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "src/scoped/layered-store.ts",
+      "status": "applied",
+      "surface": "scoped entry",
+      "change": "target-routed MemoryStore facade: user -> shared profile store, memory/failure -> scope store, unknown method throws",
+      "reason": "Fork-owned file. Keeps the engine untouched (zero hunks in memory-tool.ts) while giving user-writes a second home.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "tests/scoped/shared-layer.test.ts",
+      "status": "applied",
+      "surface": "scoped entry",
+      "change": "9 cases: cross-scope visibility, scope isolation, write routing, erasure split, root overlap refusal, policy truthfulness",
+      "reason": "Fork-owned file. The shared layer is where an erasure bug becomes a compliance bug.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "status": "applied",
+      "risk": "edit",
+      "anchors": [],
+      "baseBlob": null,
+      "path": ".github/workflows/publish.yml",
+      "surface": "release pipeline",
+      "change": "registry existence check names @njuptlzf/pi-hermes-memory instead of upstream pi-hermes-memory",
+      "reason": "The check decides whether a re-run publishes; pointing it at the wrong name makes every re-run look like a first publish."
+    },
+    {
+      "status": "applied",
+      "risk": "edit",
+      "anchors": [],
+      "baseBlob": null,
+      "path": ".github/workflows/release.yml",
+      "surface": "release pipeline",
+      "change": "same registry check, same scoped name",
+      "reason": "Same reason as publish.yml."
+    },
+    {
+      "status": "applied",
+      "risk": "edit",
+      "anchors": [],
+      "baseBlob": null,
+      "path": "docs/PUBLISHING.md",
+      "surface": "release docs",
+      "change": "scoped name in trust commands, install lines and the fork note about per-package trusted publishing",
+      "reason": "A trust config created for upstream does nothing for this package."
+    },
+    {
+      "status": "applied",
+      "risk": "edit",
+      "anchors": [],
+      "baseBlob": null,
+      "path": "README.md",
+      "surface": "user docs",
+      "change": "install command uses the scoped name; a banner states this is a fork",
+      "reason": "Installing the unscoped name gets upstream, not this fork."
     }
   ]
 }

@@ -27,11 +27,24 @@ export interface ScopedRootInput {
    * across tenants on purpose. Omit it when the host does not have one.
    */
   readonly runtimeRoot?: string | null;
+  /**
+   * Cross-scope user root, absolute, shared by every scope of ONE user —
+   * e.g. `<dataDir>/memory/<userId>/profile`.
+   *
+   * Deliberately a separate root and not a subdirectory of `storageRoot`: the two
+   * have different erasure semantics. `storageRoot` dies with the scope, this one
+   * only dies when the *user* is deleted. Putting the profile inside the scope
+   * would make "erase this qualification" silently erase the user's identity.
+   *
+   * Omit it and the tenant is scope-only: no cross-scope profile, nothing shared.
+   */
+  readonly sharedRoot?: string | null;
 }
 
 export interface ScopedRoots {
   readonly storageRoot: string;
   readonly runtimeRoot: string | null;
+  readonly sharedRoot: string | null;
 }
 
 export interface ScopedLayout {
@@ -41,6 +54,8 @@ export interface ScopedLayout {
   readonly skillsDir: string;
   /** `<storageRoot>/projects/<slug>/` — per-project stores inside the tenant. */
   readonly projectsRoot: string;
+  /** `<sharedRoot>/profile/` — the cross-scope user profile, or null when scope-only. */
+  readonly profileDir: string | null;
   /** Pinned standing instructions file. */
   readonly standingFile: string;
   /** Session index database for this tenant, or null without a runtime root. */
@@ -85,7 +100,23 @@ export function resolveScopedRoots(input: ScopedRootInput): ScopedRoots {
   const runtimeRoot = input.runtimeRoot === undefined || input.runtimeRoot === null
     ? null
     : assertAbsolute(input.runtimeRoot, "runtimeRoot");
-  return { storageRoot, runtimeRoot };
+  const sharedRoot = input.sharedRoot === undefined || input.sharedRoot === null
+    ? null
+    : assertAbsolute(input.sharedRoot, "sharedRoot");
+
+  if (sharedRoot !== null) {
+    // Overlapping roots make erasure ambiguous: "delete this scope" would take a
+    // slice out of the shared profile, or "delete the user" would miss data that
+    // happens to live under a scope. Keep them disjoint in both directions.
+    if (isInsideRoot(sharedRoot, storageRoot) || isInsideRoot(storageRoot, sharedRoot)) {
+      throw new Error(
+        `${SCOPED_ROOT_ERROR}: \`sharedRoot\` and \`storageRoot\` must not overlap ` +
+          `(shared=${sharedRoot}, scope=${storageRoot}) — erasure of one would corrupt the other`,
+      );
+    }
+  }
+
+  return { storageRoot, runtimeRoot, sharedRoot };
 }
 
 /**
@@ -97,6 +128,7 @@ export function scopedLayout(roots: ScopedRoots): ScopedLayout {
     memoryDir,
     skillsDir: path.join(memoryDir, "skills"),
     projectsRoot: path.join(memoryDir, "projects"),
+    profileDir: roots.sharedRoot === null ? null : path.join(roots.sharedRoot, "profile"),
     standingFile: "STANDING.md",
     sessionsDbPath: roots.runtimeRoot === null ? null : path.join(roots.runtimeRoot, "sessions"),
   };

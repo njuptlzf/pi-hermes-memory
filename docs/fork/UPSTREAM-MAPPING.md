@@ -211,3 +211,38 @@ agent:
 | Fork-owned files added | 12 |
 | Engine files whose **existing** lines changed | 0 — all edits are additions |
 | Hunks inside functions upstream edits | 0 |
+
+---
+
+## 8. Two-layer memory, and a policy prompt that cannot lie
+
+Two additions, both from the decision that a tenant is not a single-user CLI.
+
+**A cross-scope profile.** `sharedRoot` is a second root, one per *user*, holding
+`<sharedRoot>/profile/USER.md`. `entry.ts` opens two stores and hands the engine a
+target-routed facade (`layered-store.ts`): `target: "user"` goes to the profile,
+`memory`/`failure` stay in the scope. The engine is not edited for this — no hunks
+in `memory-tool.ts` — because the engine knows one store and a tenant layer is not
+its concept.
+
+Three constraints that are the whole design:
+
+| Constraint | Why it is not negotiable |
+| --- | --- |
+| the two roots must be disjoint | otherwise "delete this qualification" takes a slice out of the user's identity, or "delete the user" misses data under a scope; `resolveScopedRoots` refuses both nestings |
+| `erase()` is scope-only by default | `erase({ includeShared: true })` is account deletion, a separate explicit call — the same shape the host port uses |
+| the facade throws on unrouted methods | a partial cast would compile and then fail somewhere else with a misleading message; failing at the boundary names the method to add |
+
+**A policy prompt built from capabilities.** `src/scoped/policy.ts` replaces
+upstream's `MEMORY_POLICY_PROMPT` for tenant use. Upstream's text is true for a
+single-user CLI and false in a tenant: it promises "global notes", offers a
+`project` target with no store behind it, and advertises `memory_search` — a tool
+the scoped entry never mounts. A model told it has a tool will try to use it, and
+that failure is a wasted turn, not a compile error, so nothing catches it. The
+builder takes flags (`hasSearch`, `hasProjectStore`, `hasSharedProfile`, ...) and
+each sentence is emitted only when the assembly actually has it.
+
+Tests pin both halves: `tests/scoped/shared-layer.test.ts` asserts cross-scope
+visibility, scope isolation, write routing, erasure split and root-overlap refusal,
+plus the negative prompt assertions — no `global notes`, no `memory_search` when
+unmounted.

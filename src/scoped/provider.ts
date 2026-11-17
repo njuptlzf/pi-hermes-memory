@@ -25,6 +25,11 @@ export const PROVIDER_ID = "hermes-scoped";
 interface ProviderContext {
   /** Absolute, host-computed, one per (user, product, qual). */
   readonly storageRoot: string;
+  /**
+   * Absolute, host-computed, one per USER. Shared by every scope of that user.
+   * Omit it and the tenant is scope-only.
+   */
+  readonly sharedRoot?: string | null;
   readonly agentDir?: string;
   readonly scope?: { readonly userId: string; readonly productId: string; readonly qual: string };
 }
@@ -34,7 +39,7 @@ interface ProviderSession {
   readonly factory: (pi: unknown) => void;
   readonly selfInjects: boolean;
   promptSection(): Promise<string>;
-  erase(): Promise<void>;
+  erase(options?: { readonly includeShared?: boolean }): Promise<void>;
   dispose(): Promise<void>;
 }
 
@@ -51,7 +56,10 @@ const provider: ScopedHermesProvider = {
     if (typeof ctx?.storageRoot !== "string" || ctx.storageRoot.trim() === "") {
       throw new Error("hermes-scoped: open() requires an absolute storageRoot");
     }
-    const tenant: ScopedHermesHandle = openScopedHermesMemory({ storageRoot: ctx.storageRoot });
+    const tenant: ScopedHermesHandle = openScopedHermesMemory({
+      storageRoot: ctx.storageRoot,
+      sharedRoot: ctx.sharedRoot ?? null,
+    });
     return {
       providerId: PROVIDER_ID,
       selfInjects: false,
@@ -59,7 +67,7 @@ const provider: ScopedHermesProvider = {
         tenant.mount(pi as Parameters<ScopedHermesHandle["mount"]>[0]);
       },
       promptSection: () => tenant.promptSection(),
-      erase: () => tenant.erase(),
+      erase: (options) => tenant.erase(options),
       dispose: () => tenant.dispose(),
     };
   },

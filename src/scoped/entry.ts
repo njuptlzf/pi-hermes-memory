@@ -2,21 +2,21 @@
  * Scoped (multi-tenant) entry for pi-hermes-memory.
  *
  * What this is: the tenant-safe composition of hermes' memory core — one
- * `MemoryStore` per tenant, the write tool, and the policy prompt. What this is
- * NOT: the full `src/index.ts` surface. The TUI commands, the background review
- * loop and session flush are excluded on purpose, for three reasons that are
- * contract requirements of an in-process host, not preferences:
+ * `MemoryStore` per scope, a cross-scope profile store per user, the write tool,
+ * and a policy prompt built from what is actually mounted. What this is NOT: the
+ * full `src/index.ts` surface. TUI commands, the background review loop and
+ * session flush are excluded on purpose, for three reasons that are contract
+ * requirements of an in-process host, not preferences:
  *
  *   1. They read `process.env` / `os.homedir()` (host owns configuration).
- *   2. The review loop spawns a `pi` child process (`child_process`), but an
- *      in-process host owns process lifetime.
- *   3. `registerCommand` is a no-op in rpc mode — dead surface that only
- *      misleads.
+ *   2. The review loop spawns a `pi` child process, but an in-process host owns
+ *      process lifetime.
+ *   3. `registerCommand` is a no-op in rpc mode — dead surface that only misleads.
  *
  * Two halves, split on purpose: `openScopedHermesMemory()` builds the tenant
- * (store, prompt text, erasure) and needs no pi; `handle.mount(pi)` attaches
- * tools and hooks. A host that assembles its own system prompt can therefore
- * ask for the memory section before pi binds anything, which is the order
+ * (stores, prompt text, erasure) and needs no pi; `handle.mount(pi)` attaches
+ * tools and hooks. A host that assembles its own system prompt can therefore ask
+ * for the memory section before pi binds anything, which is the order
  * `createAgentSession` actually uses.
  */
 
@@ -24,11 +24,12 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { defaultMemoryConfig } from "../config.js";
-import { buildPromptContext } from "../prompt-context.js";
 import { AtomicLockCoordinator } from "../store/atomic-lock-coordinator.js";
 import { MemoryStore } from "../store/memory-store.js";
 import { registerMemoryTool } from "../tools/memory-tool.js";
 import type { MemoryConfig } from "../types.js";
+import { createLayeredStore } from "./layered-store.js";
+import { buildScopedMemoryPolicy } from "./policy.js";
 import { resolveScopedRoots, scopedLayout, type ScopedLayout, type ScopedRootInput, type ScopedRoots } from "./roots.js";
 
 export interface ScopedHermesOptions extends ScopedRootInput {
@@ -36,55 +37,52 @@ export interface ScopedHermesOptions extends ScopedRootInput {
   readonly config?: Partial<MemoryConfig>;
   /** Inject the memory policy prompt on `before_agent_start`. Default: true. */
   readonly injectPrompt?: boolean;
+  /** Max characters of shared profile injected into the prompt. Default: 1200. */
+  readonly profilePromptChars?: number;
+}
+
+export interface EraseOptions {
+  /**
+   * Also erase the cross-scope profile (`sharedRoot`).
+   *
+   * Off by default on purpose: erasing one qualification must not delete the
+   * user's identity. Account deletion is the caller's explicit second call.
+   */
+  readonly includeShared?: boolean;
 }
 
 export interface ScopedHermesHandle {
   readonly roots: ScopedRoots;
   readonly layout: ScopedLayout;
   readonly config: MemoryConfig;
-  /** The tenant's store. Exposed so the host can build its own read surfaces. */
+  /**
+   * The store the tool writes through: `target: "user"` goes to the profile,
+   * everything else to the scope. Exposed for hosts that build their own reads.
+   */
   readonly store: MemoryStore;
+  /** The cross-scope profile store, or null in a scope-only tenant. */
+  readonly profileStore: MemoryStore | null;
   /** Resolves once the initial disk load has completed; never rejects unhandled. */
   readonly ready: Promise<void>;
-  /**
-   * The memory policy section, for a host that assembles the system prompt
-   * itself instead of letting the extension append to it.
-   *
-   * Both routes exist because hosts differ: pi appends via a `before_agent_start`
-   * hook, a server that owns prompt composition would rather take the text and
-   * decide where it lands. Same source, so the two can never drift.
-   */
+  /** The memory policy section, for a host that assembles the prompt itself. */
   promptSection(): Promise<string>;
   /** Attach tools and hooks to a pi instance. Safe to call once per handle. */
   mount(pi: ExtensionAPI): void;
-  /**
-   * Delete everything this tenant stored, and release its handles.
-   *
-   * The erasure promise the whole fork exists for: one call, one tenant gone,
-   * no other tenant disturbed. Refuses to touch anything outside the root.
-   */
-  erase(): Promise<void>;
-  /** Release the root claim so the same tenant can be re-created. */
+  /** Erase this scope; optionally the user's shared profile too. */
+  erase(options?: EraseOptions): Promise<void>;
+  /** Release the root claim and pinned connections. */
   dispose(): Promise<void>;
 }
 
 /**
- * One live handle per storage root, per process.
+ * One live handle per scope root, per process.
  *
- * Two stores on the same directory would interleave writes with no coordination
- * (upstream's mutation lock is per-process but keyed by file, and both writers
- * would hold it at different times). This is a host-bug guard, not tenant state:
- * the key is the resolved path, never a global "current tenant".
+ * Two stores on the same directory would interleave writes with no coordination.
+ * The shared profile root is deliberately NOT claimed: several scopes of the same
+ * user are supposed to open it at once.
  */
 const claimedRoots = new Set<string>();
 
-/**
- * Build a tenant without touching pi.
- *
- * A host that owns prompt assembly needs `promptSection()` before the session
- * exists; requiring pi first would force it to mount an extension it only
- * wants a string from.
- */
 export function openScopedHermesMemory(options: ScopedHermesOptions): ScopedHermesHandle {
   return openWithRoots(options, resolveScopedRoots(options));
 }
@@ -107,27 +105,65 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
     memoryDir: layout.memoryDir,
   };
 
-  const store = new MemoryStore(config);
+  const scopeStore = new MemoryStore(config);
+  const profileStore = layout.profileDir === null
+    ? null
+    : new MemoryStore({ ...config, memoryDir: layout.profileDir });
+  const store = profileStore === null
+    ? scopeStore
+    : createLayeredStore({ scopeStore, profileStore });
+
   let disposed = false;
   let mounted = false;
 
-  const ready = store.loadFromDisk().catch((error: unknown) => {
-    // Surface the failure to the host without turning it into an unhandled
-    // rejection if the host never awaits `ready`.
-    queueMicrotask(() => {
-      console.error("[scoped-hermes] initial load failed:", error);
+  const ready = Promise.all([scopeStore.loadFromDisk(), profileStore?.loadFromDisk() ?? Promise.resolve()])
+    .then(() => undefined)
+    .catch((error: unknown) => {
+      // Surface the failure without turning it into an unhandled rejection when
+      // the host never awaits `ready`.
+      queueMicrotask(() => {
+        console.error("[scoped-hermes] initial load failed:", error);
+      });
     });
-  });
+
+  const profileSection = (): string => {
+    if (profileStore === null) return "";
+    const limit = options.profilePromptChars ?? 1200;
+    const entries = profileStore.getUserEntries();
+    if (entries.length === 0) return "";
+
+    // Capped and counted: a silently truncated profile looks complete to the
+    // model, and it will answer as if the tail does not exist.
+    const shown: string[] = [];
+    let used = 0;
+    for (const entry of entries) {
+      if (used + entry.length > limit) break;
+      shown.push(entry);
+      used += entry.length;
+    }
+    const hidden = entries.length - shown.length;
+    const more = hidden > 0 ? `\n- (${hidden} more profile entries not shown)` : "";
+    return `<user-profile scope="shared-across-scopes">\n${shown.map((entry) => `- ${entry}`).join("\n")}${more}\n</user-profile>`;
+  };
 
   const promptSection = async (): Promise<string> => {
     await ready;
-    return buildPromptContext(config, store, null, "", null, false);
+    const policy = buildScopedMemoryPolicy({
+      // False today because the scoped entry mounts only the write tool. Each of
+      // these flips only together with the code that mounts the tool.
+      hasSearch: false,
+      hasSessionSearch: false,
+      hasSkills: false,
+      hasProjectStore: false,
+      hasSharedProfile: profileStore !== null,
+    });
+    return [policy, profileSection()].filter(Boolean).join("\n\n");
   };
 
-  const releaseLock = (): void => {
+  const releaseLock = (root: string): void => {
     // Path mirrors markdown-mutation-lock.ts:14 — the coordinator sits two levels
-    // above the entry file, i.e. directly in the tenant's storage root.
-    AtomicLockCoordinator.shared(path.join(roots.storageRoot, ".pi-hermes-locks.sqlite")).closeHandle();
+    // above the entry file, i.e. directly in the root that holds `memory/`.
+    AtomicLockCoordinator.shared(path.join(root, ".pi-hermes-locks.sqlite")).closeHandle();
   };
 
   return {
@@ -135,6 +171,7 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
     layout,
     config,
     store,
+    profileStore,
     ready,
     promptSection,
     mount(pi: ExtensionAPI) {
@@ -171,19 +208,24 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
       // does not want. `()` keeps the tool's project argument inert.
       registerMemoryTool(pi, store, () => null);
     },
-    async erase() {
+    async erase(eraseOptions?: EraseOptions) {
       await ready;
-      // Erasure is the contract: close the pinned connection first (Windows
-      // refuses to unlink an open file), then remove exactly this tenant.
-      releaseLock();
+      // Close pinned connections first: Windows refuses to unlink an open file.
+      releaseLock(roots.storageRoot);
       await fs.rm(roots.storageRoot, { recursive: true, force: true });
       claimedRoots.delete(layout.memoryDir);
+
+      if (eraseOptions?.includeShared && roots.sharedRoot !== null) {
+        releaseLock(roots.sharedRoot);
+        await fs.rm(roots.sharedRoot, { recursive: true, force: true });
+      }
     },
     async dispose() {
       if (disposed) return;
       disposed = true;
       await ready;
-      releaseLock();
+      releaseLock(roots.storageRoot);
+      if (roots.sharedRoot !== null) releaseLock(roots.sharedRoot);
       claimedRoots.delete(layout.memoryDir);
     },
   };
@@ -195,10 +237,9 @@ export function createScopedHermesMemory(options: ScopedHermesOptions): (pi: Ext
  * Immediate-mount form: build the tenant and wire it to `pi` in one call.
  *
  * Both forms exist because hosts differ in *when* they know the tenant. A host
- * that registers factories up front (`extensionFactories: [scopedMemory({dir})]`
- * in agent-chat) needs the curried form; a host that mounts imperatively needs
- * this one. Validation runs in both cases before anything is written, so a
- * wiring mistake fails at startup rather than on the first user message.
+ * that registers factories up front needs the curried form; a host that mounts
+ * imperatively needs this one. Validation runs in both cases before anything is
+ * written, so a wiring mistake fails at startup rather than on the first message.
  */
 export function createScopedHermesMemory(pi: ExtensionAPI, options: ScopedHermesOptions): ScopedHermesHandle;
 
@@ -217,7 +258,7 @@ export function createScopedHermesMemory(
       return handle;
     };
   }
-  const handle = openScopedHermesMemory(maybeOptions);
+  const handle = openWithRoots(maybeOptions, resolveScopedRoots(maybeOptions));
   handle.mount(piOrOptions as ExtensionAPI);
   return handle;
 }
