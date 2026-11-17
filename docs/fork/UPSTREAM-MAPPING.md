@@ -106,70 +106,55 @@ the merge drill are for.
 
 ---
 
-## 6. Host wiring — agent-chat, and the two things it changed about the design
+## 6. Host wiring — agent-chat behind a memory-provider port
 
-agent-chat loads extensions as **factories**, not paths:
-
-```ts
-// packages/server/src/session.ts (host side, unchanged by this fork)
-const memoryExtensions = product.memoryEnabled
-  ? [scopedMemory({ dir: path.join(opts.dataDir, "memory", opts.userId, opts.qual || "default"), autoCapture: true })]
-  : [];
-...
-extensionFactories: [...mcpExtensions, ...confirmExtensions, ...memoryExtensions],
-```
-
-so the hermes equivalent is a drop-in of the same shape, one tenant per session:
+agent-chat does not hardcode any memory plugin. It defines a port
+(`packages/protocol/src/memory-provider.ts`) and resolves an id from the
+product manifest (`agent.memory: { provider: "hermes-scoped" }`). The fork's
+job is therefore not "be drop-in compatible with scopedMemory" but "satisfy the
+port", which is a smaller and more stable obligation:
 
 ```ts
-import { createScopedHermesMemory } from "pi-hermes-memory/scoped";
-
-const memoryExtensions = product.memoryEnabled
-  ? [createScopedHermesMemory({
-      storageRoot: path.join(opts.dataDir, "memory", opts.userId, opts.qual || "default"),
-    })]
-  : [];
+// packages/server/src/memory-providers.ts (host side)
+const tenant = openScopedHermesMemory({ storageRoot: ctx.storageRoot });
+return {
+  providerId: "hermes-scoped",
+  selfInjects: false,           // the host owns prompt assembly
+  factory: (pi) => tenant.mount(pi),
+  promptSection: () => tenant.promptSection(),
+  erase: () => tenant.erase(),
+  dispose: () => tenant.dispose(),
+};
 ```
 
-Two consequences that were not visible from the roadmap:
+Three consequences, each of which changed this fork's shape:
 
-1. **The tenant root arrives by closure, not by env.** `createScopedHermesMemory(
-   { storageRoot })` returns `(pi) => handle`, so per-session binding needs no
-   `process.env`, no flag, and no process-global "current tenant" — the trap
-   §2 of the roadmap warns about is avoided by construction rather than by
-   discipline. That is also why the entry is a separate file from `src/index.ts`:
-   the admission gate rejects `process.env`, `os.homedir()`, `child_process` and
-   `registerCommand` in the declared file, and hermes' default entry has all
-   four. `createScopedHermesMemory` is composed only of store + write tool +
-   policy prompt.
+1. **`open()` and `mount()` are separate.** The host needs the prompt section
+   while it builds `DefaultResourceLoader`, before any pi session exists.
+   `openScopedHermesMemory(options)` therefore returns the tenant (store,
+   `promptSection`, `erase`, `dispose`) and `handle.mount(pi)` attaches tools
+   and hooks. `createScopedHermesMemory` remains as the one-call convenience.
+2. **`selfInjects: false` is the correct answer here.** Upstream hermes appends
+   its own section in `before_agent_start`; in a server that assembles the
+   prompt, that is the wrong owner — and it silently does nothing whenever the
+   host skips `bindExtensions`. The port forces the decision to be explicit, and
+   the fork exposes `promptSection()` from the same builder the hook uses, so
+   the two routes cannot drift.
+3. **Admission still applies.** `extension-admission.ts` scans the declared
+   extension file for `process.env`, `os.homedir()`, `child_process` and TUI
+   registrations. The scoped entry passes ②③④; ① (default export) belongs to
+   the adapter the host declares, not to this module.
 
-   Audit result (agent-chat's own `auditExtensionSource`, run against
-   `src/scoped/entry.ts`): criteria ②③④ pass; ① no default export is reported
-   for the *module*, which is expected — the adapter file the host declares is
-   the one that must `export default (pi) => createScopedHermesMemory({...})(pi)`.
-
-2. **`bindExtensions` is conditional in the host.** `session.ts` only calls
-   `session.bindExtensions(...)` when `mcpExtensions.length > 0 ||
-   product.extensionPaths.length > 0`. A memory-only product therefore never
-   binds, so `session_start` / `before_agent_start` never fire and the policy
-   prompt would never be injected — the tools would still work. Either broaden
-   that condition in the host, or have the host call the handle's `ready` and
-   build its own prompt section. Not a fork bug; a wiring fact the fork has to
-   state out loud because silence here looks like "memory works" when only the
-   write half does.
-
-3. **Erasure needs the lock database closed.** Windows refuses to remove the
-   tenant directory while `.pi-hermes-locks.sqlite` is open, and that file sits
-   in the tenant's storage root, not in `memory/`. `dispose()` closes exactly
-   that coordinator (new `AtomicLockCoordinator.closeHandle()`), so
-   "one `rm -rf` = one tenant gone" holds on Windows and does not disturb other
-   tenants. `tests/scoped/multi-tenant.test.ts` asserts the delete succeeds.
+Erasure is part of the port, so it had to become a first-class call:
+`handle.erase()` closes the tenant's lock database and removes exactly the
+tenant root. `tests/scoped/multi-tenant.test.ts` asserts the deletion succeeds
+and that a neighbouring tenant's file survives.
 
 ### Diff counters after this slice
 
 | Counter | Value |
 | --- | --- |
-| Upstream files modified | 3 (`package.json` scripts, `src/config.ts` additive, `src/store/atomic-lock-coordinator.ts` additive) |
+| Upstream files modified | 3 (`package.json`, `src/config.ts`, `src/store/atomic-lock-coordinator.ts`) |
 | Fork-owned files added | 10 |
 | Engine files whose **existing** lines changed | 0 — all three edits are additions |
 | Hunks inside functions upstream edits | 0 |

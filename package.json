@@ -4,6 +4,12 @@
   "description": "🧠 Persistent memory + 🔍 session search + 🛡️ secret scanning for Pi. Token-aware policy-only memory by default, SQLite FTS5 search, auto-consolidation, procedural skills. 732 tests. Ported from Hermes agent.",
   "type": "module",
   "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./scoped": "./src/scoped/entry.ts",
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
   "files": [
     "src",
     "scripts",

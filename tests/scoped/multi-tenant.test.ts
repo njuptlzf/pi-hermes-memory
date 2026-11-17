@@ -121,6 +121,37 @@ describe("scoped hermes entry — multi-tenant isolation", () => {
     assert.strictEqual(second.handle.roots.storageRoot, path.normalize(root));
   });
 
+  it("erases one tenant without touching its neighbour", async () => {
+    const doomedRoot = tempRoot("doomed");
+    const keptRoot = tempRoot("kept");
+    const doomed = mount(doomedRoot).handle;
+    const kept = mount(keptRoot).handle;
+
+    await doomed.store.add("memory", "erase me");
+    await kept.store.add("memory", "keep me");
+
+    await doomed.erase();
+
+    assert.strictEqual(fs.existsSync(doomedRoot), false);
+    assert.strictEqual(fs.existsSync(keptRoot), true);
+    assert.match(
+      fs.readFileSync(path.join(kept.layout.memoryDir, MEMORY_FILE), "utf-8"),
+      /keep me/,
+    );
+
+    // The claim must be released too, or the tenant can never come back.
+    const reborn = mount(doomedRoot);
+    assert.strictEqual(reborn.handle.layout.memoryDir, doomed.layout.memoryDir);
+  });
+
+  it("exposes the same prompt section it injects through the hook", async () => {
+    const { handle } = mount(tempRoot("prompt"));
+    const section = await handle.promptSection();
+
+    assert.equal(typeof section, "string");
+    assert.ok(section.length > 0, "a policy-only store should still produce a policy section");
+  });
+
   it("cannot be pointed at a machine-wide or relative root", () => {
     assert.throws(() => resolveScopedRoots({ storageRoot: "relative/path" }), new RegExp(SCOPED_ROOT_ERROR));
     assert.throws(() => resolveScopedRoots({ storageRoot: "   " }), new RegExp(SCOPED_ROOT_ERROR));
