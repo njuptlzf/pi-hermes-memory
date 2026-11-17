@@ -1,0 +1,40 @@
+name: Upstream Divergence
+
+# Fork-owned guard. Fails when the fork diverges from upstream without declaring
+# it in docs/fork/divergences.json, or when a declared change went stale
+# (upstream absorbed it / we lost it). Deliberately blocking — see
+# docs/fork/UPSTREAM-MAPPING.md §5 for why the advisory variant does not work
+# on a fork that has to edit engine files.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  divergence:
+    name: Fork delta vs upstream
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # The check script is dependency-free (node: builtins only), so the job
+      # skips `npm install` on purpose — it must stay cheap enough to run on
+      # every PR without slowing the real test job down.
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/chandra447/pi-hermes-memory.git
+
+      - name: Fetch upstream refs and tags
+        run: git fetch --tags upstream
+
+      - name: Check fork delta
+        run: node scripts/upstream-divergence.mjs --no-fetch --no-color

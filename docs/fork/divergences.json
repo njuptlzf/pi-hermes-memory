@@ -134,6 +134,16 @@
       "baseBlob": null
     },
     {
+      "path": "docs/fork/F0-BASELINE.md",
+      "status": "applied",
+      "surface": "fork documentation",
+      "change": "measured v0.11.0 test baseline and the definition of green",
+      "reason": "Fork-owned file; never conflicts on merge.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
       "path": "docs/fork/divergences.json",
       "status": "applied",
       "surface": "fork registry",
@@ -149,6 +159,16 @@
       "surface": "sync gate",
       "change": "blocking divergence check (npm run upstream:check)",
       "reason": "Fork-owned file; never conflicts on merge.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": ".github/workflows/upstream-divergence.yml",
+      "status": "applied",
+      "surface": "CI guard",
+      "change": "runs the gate on every push/PR to main",
+      "reason": "Fork-owned file; upstream CI does not know this path.",
       "risk": "new",
       "anchors": [],
       "baseBlob": null
