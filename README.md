@@ -23,11 +23,16 @@ Your Pi agent normally forgets everything when you close a session. **This exten
 - ⚡ **Background learning** — reviews every 10 turns, saves what matters
 - 🔄 **Auto-consolidation** — merges entries when full, never loses data
 
+> **This is the scoped fork.** It publishes as `@njuptlzf/pi-hermes-memory` and adds a
+> multi-tenant entry (`pi-hermes-memory/scoped`) plus a host-neutral provider descriptor
+> (`pi-hermes-memory/scoped-provider`). Upstream remains `chandra447/pi-hermes-memory`;
+> `docs/fork/UPSTREAM-MAPPING.md` is the source of truth for what diverges and why.
+
 ## Quick Start
 
 ```bash
 # Install
-pi install npm:pi-hermes-memory
+pi install npm:@njuptlzf/pi-hermes-memory
 
 # Index your past sessions (one-time)
 /memory-index-sessions
@@ -109,7 +114,7 @@ npm test
 ## Installation
 
 ```bash
-pi install npm:pi-hermes-memory
+pi install npm:@njuptlzf/pi-hermes-memory
 ```
 
 Or install from GitHub:

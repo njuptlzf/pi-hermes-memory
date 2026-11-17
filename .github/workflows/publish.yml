@@ -141,12 +141,12 @@ jobs:
           # Already on npm is not a failure: it means this is a re-run or a second
           # dispatch for the same version. Skip publishing and carry on, so the rest of the
           # pipeline — notably a missing GitHub Release — still gets completed.
-          if npm view "pi-hermes-memory@$version" version >/dev/null 2>&1; then
+          if npm view "@njuptlzf/pi-hermes-memory@$version" version >/dev/null 2>&1; then
             echo "already-published=true" >> "$GITHUB_OUTPUT"
-            echo "::warning::pi-hermes-memory@$version is already on npm — skipping the publish step. The GitHub Release is still reconciled."
+            echo "::warning::@njuptlzf/pi-hermes-memory@$version is already on npm — skipping the publish step. The GitHub Release is still reconciled."
           else
             echo "already-published=false" >> "$GITHUB_OUTPUT"
-            echo "npm has no pi-hermes-memory@$version yet."
+            echo "npm has no @njuptlzf/pi-hermes-memory@$version yet."
           fi
 
       - run: npm ci

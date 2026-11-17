@@ -1,6 +1,6 @@
 # Publishing
 
-`pi-hermes-memory` ships to npm. [pi.dev/packages](https://pi.dev/packages) indexes it automatically from the `pi-package` keyword — there is no gallery submission step. The same workflow run that publishes to npm also creates the matching GitHub Release.
+`@njuptlzf/pi-hermes-memory` ships to npm. [pi.dev/packages](https://pi.dev/packages) indexes it automatically from the `pi-package` keyword — there is no gallery submission step. The same workflow run that publishes to npm also creates the matching GitHub Release.
 
 ## Workflows
 
@@ -42,21 +42,21 @@ Trusted publishing is configured on npm, not in this repo. Pick either route —
 
 ```bash
 npm login
-npm trust github pi-hermes-memory \
+npm trust github @njuptlzf/pi-hermes-memory \
   --file publish.yml \
-  --repo chandra447/pi-hermes-memory \
+  --repo njuptlzf/pi-hermes-memory \
   --env publish \
   --allow-publish \
   --allow-stage-publish
 ```
 
-`npm trust list pi-hermes-memory` shows the current configuration. The registry allows **one** trust configuration per package — if one already exists, `npm trust revoke --id <id> pi-hermes-memory` first, then re-create it.
+`npm trust list @njuptlzf/pi-hermes-memory` shows the current configuration. The registry allows **one** trust configuration per package — if one already exists, `npm trust revoke --id <id> @njuptlzf/pi-hermes-memory` first, then re-create it.
 
-**Web UI:** npmjs.com → pi-hermes-memory → Settings → Trusted publishing → Add trusted publisher → GitHub Actions:
+**Web UI:** npmjs.com → `@njuptlzf/pi-hermes-memory` → Settings → Trusted publishing → Add trusted publisher → GitHub Actions:
 
 |Field|Value|
 |---|---|
-|Organization or user|`chandra447`|
+|Organization or user|`njuptlzf`|
 |Repository|`pi-hermes-memory`|
 |Workflow filename|`publish.yml` (filename only — no path)|
 |Environment name|`publish` (must match `environment:` in the workflow; leave blank on npm to skip the environment claim)|
@@ -65,6 +65,24 @@ npm trust github pi-hermes-memory \
 > Configurations created after 2026-09-03 enable `npm stage publish` automatically. `npm publish` must be granted explicitly — via `--allow-publish` or the checkbox — or the direct publish step fails with a 403.
 
 No repository secret is required. (`secrets.NPM_TOKEN` never existed — its absence is why the 2026-07-26 dispatch run died with `ENEEDAUTH`.)
+
+### Fork note: the scoped name
+
+This fork publishes as `@njuptlzf/pi-hermes-memory`. Two consequences that are not
+optional:
+
+- The trusted publisher is configured **per package**, so a config created for
+  upstream's `pi-hermes-memory` does nothing here. Re-run the setup above with the
+  scoped name; the registry allows one config per package.
+- `npm publish --access public` is required for a scoped package to be publicly
+  installable; the workflow already passes it.
+
+`[待核实: 首次发布能否走 OIDC trusted publishing]` — npm's trusted-publishing
+flow assumes the package already exists; for a brand-new name the first publish
+may have to be a manual `npm publish --access public` (or a `stage` dispatch) from
+an authenticated checkout. Verify against npm's docs before the first release, or
+just try a `stage: true` dispatch — it either lands in staging or fails with a 403
+that names the missing permission.
 
 ## Releasing
 
@@ -129,14 +147,14 @@ Version `0.10.0-beta.1` plus `dist-tag: next`. A prerelease with `latest` is rej
 |`publish` failed after `verify` passed|Re-dispatch `publish.yml` with the same `ref`; if the version did land, the publish step is skipped and the run still finishes green|
 |Package published, GitHub Release missing|Re-dispatch `publish.yml` with the same `ref` — publishing is skipped and the Release is created from the `CHANGELOG.md` section|
 |Bumped and tagged, but publish failed|The tag exists; re-dispatch `publish.yml` with `ref: v<version>`|
-|`npm error You cannot publish over the previously published versions`|Two publishes ran for one version within the registry's propagation delay (for example a dispatch right after publishing a Release). The first one published; the failed run is harmless — confirm with `npm view pi-hermes-memory version`|
+|`npm error You cannot publish over the previously published versions`|Two publishes ran for one version within the registry's propagation delay (for example a dispatch right after publishing a Release). The first one published; the failed run is harmless — confirm with `npm view @njuptlzf/pi-hermes-memory version`|
 |`403` from npm on publish|The trusted publisher is missing or does not allow `npm publish` — see [One-time setup](#one-time-setup-the-npm-trusted-publisher)|
 
 ## Runners
 
 Everything runs on GitHub-hosted `ubuntu-latest`. Blacksmith is not an option for this repository, for two independent reasons:
 
-1. **Blacksmith is limited to GitHub organizations** — ["not available for personal repositories"](https://docs.blacksmith.sh/introduction/quickstart). `chandra447/pi-hermes-memory` is owned by a personal user account, so its jobs cannot be scheduled on Blacksmith at all.
+1. **Blacksmith is limited to GitHub organizations** — ["not available for personal repositories"](https://docs.blacksmith.sh/introduction/quickstart). `njuptlzf/pi-hermes-memory` is owned by a personal user account, so its jobs cannot be scheduled on Blacksmith at all.
 2. **Even in an org, the publish job must stay on GitHub-hosted runners.** npm's trusted publishing supports GitHub-hosted runners only — self-hosted runners (which is the class Blacksmith registers into) are explicitly unsupported — and provenance asks for a cloud-hosted runner too. That is the whole mechanism that lets this repo publish without an `NPM_TOKEN`.
 
 Cost is not a factor either way: Actions on public repositories is free, including the per-minute platform charge introduced in 2026. Blacksmith is a paid service with a 3,000 min/month free tier, and its wins — ~2× faster CPUs, 4× faster caches — would trim a ~3-minute test job.
@@ -146,10 +164,10 @@ If the repo later moves into a GitHub organization and CI wall-clock becomes a r
 ## Verifying a release
 
 ```bash
-npm view pi-hermes-memory version dist-tags
+npm view @njuptlzf/pi-hermes-memory version dist-tags
 npm audit signatures           # verifies registry + provenance attestations
 gh release view v0.9.11
-pi install npm:pi-hermes-memory
+pi install npm:@njuptlzf/pi-hermes-memory
 ```
 
 ## Known gap
