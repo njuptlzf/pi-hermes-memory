@@ -190,7 +190,7 @@
       "path": "package.json",
       "status": "applied",
       "surface": "npm scripts",
-      "change": "adds upstream:check scripts, a build script (tsc -p tsconfig.json), the scoped package name (@njuptlzf/pi-hermes-memory) and conditional exports (agent-chat-source -> src, default -> dist)",
+      "change": "adds upstream:check scripts, build/prepack, prepublishOnly credential guard, the scoped package name and conditional exports",
       "reason": "The gate needs an entry point; scripts-only edits merge trivially.",
       "risk": "edit",
       "anchors": [
@@ -337,6 +337,16 @@
       "surface": "user docs",
       "change": "install command uses the scoped name; a banner states this is a fork",
       "reason": "Installing the unscoped name gets upstream, not this fork."
+    },
+    {
+      "path": "scripts/check-pack-contents.mjs",
+      "status": "applied",
+      "surface": "release gate",
+      "change": "prepublishOnly guard: refuse to publish if a credential-shaped file sits under src/dist/scripts/docs",
+      "reason": "npm ignores .npmignore when files is set (verified), so the only working control is a lifecycle check.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
     }
   ]
 }

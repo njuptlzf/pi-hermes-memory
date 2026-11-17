@@ -44,7 +44,8 @@
     "upstream:check": "node scripts/upstream-divergence.mjs",
     "upstream:check:ci": "node scripts/upstream-divergence.mjs --no-fetch --no-color",
     "build": "tsc -p tsconfig.json",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "prepublishOnly": "node scripts/check-pack-contents.mjs"
   },
   "keywords": [
     "pi-package",
