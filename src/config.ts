@@ -120,6 +120,19 @@ const DEFAULT_CONFIG: MemoryConfig = {
   sessionIndexExclude: [],
 };
 
+/**
+ * A pure copy of the built-in defaults, with no I/O.
+ *
+ * `loadConfig()` resolves a JSON file next to the agent root and is therefore
+ * environment-bound by construction. A host that owns configuration — an
+ * in-process server holding several tenants — must not call it: one tenant's
+ * config file would become every tenant's config. `createScopedHermesMemory()`
+ * spreads the host's overrides on top of this instead.
+ */
+export function defaultMemoryConfig(): MemoryConfig {
+  return { ...DEFAULT_CONFIG };
+}
+
 export const DEFAULT_CONFIG_PATH = path.join(
   AGENT_ROOT,
   "hermes-memory-config.json",

@@ -321,6 +321,18 @@ export class AtomicLockCoordinator {
     return `${path.resolve(this.dbPath)}\0${key}\0${token}`;
   }
 
+  /**
+   * Close only this coordinator's pinned connection.
+   *
+   * The per-tenant counterpart of `closeHandles()`: a host that erases one
+   * tenant must not have to drop every other tenant's connection to do it, and
+   * on Windows the directory cannot be removed while any file inside it is
+   * still open. Later calls reopen lazily, so this needs no re-registration.
+   */
+  closeHandle(): void {
+    this.discardCachedDb();
+  }
+
   private discardCachedDb(): void {
     const db = this.cachedDb;
     this.cachedDb = null;

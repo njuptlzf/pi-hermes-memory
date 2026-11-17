@@ -15,13 +15,53 @@
     },
     {
       "path": "src/config.ts",
-      "status": "planned",
+      "status": "applied",
       "surface": "config resolution",
-      "change": "carry the injected storageRoot through config; no env/cwd discovery for memory paths",
-      "reason": "2 of the 27 AGENT_ROOT references; config is the natural carrier for the root.",
+      "change": "adds defaultMemoryConfig() — a pure copy of the built-in defaults, no file/env read — so a host that owns configuration (an in-process multi-tenant server) never calls loadConfig(); the root itself is not threaded yet",
+      "reason": "loadConfig() resolves a JSON file under the agent root, which is one tenant's file becoming every tenant's config. 2 of the 27 AGENT_ROOT references still to thread.",
       "risk": "edit",
-      "anchors": ["AGENT_ROOT"],
+      "anchors": ["AGENT_ROOT", "DEFAULT_CONFIG_PATH", "loadConfig"],
       "baseBlob": "13445e3a7f32aec9d5130b746337a4152c046abf"
+    },
+    {
+      "path": "src/store/atomic-lock-coordinator.ts",
+      "status": "applied",
+      "surface": "mutation lock connection",
+      "change": "adds closeHandle() — close this coordinator's pinned connection only, next to the existing process-wide closeHandles()",
+      "reason": "Per-tenant erasure: Windows refuses to remove the tenant directory while .pi-hermes-locks.sqlite is open, and closeHandles() would drop every other tenant's connection to erase one.",
+      "risk": "edit",
+      "anchors": ["AtomicLockCoordinator", "closeHandles", "discardCachedDb"],
+      "baseBlob": "aa18e48a1f2b05155c96551ee903c9b326035f5d"
+    },
+    {
+      "path": "src/scoped/roots.ts",
+      "status": "applied",
+      "surface": "scoped entry",
+      "change": "pure root algebra: storageRoot vs runtimeRoot, absolute-only validation, isInsideRoot() for erasure safety",
+      "reason": "Fork-owned file. No env, no homedir — the host computes both roots.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "src/scoped/entry.ts",
+      "status": "applied",
+      "surface": "scoped entry",
+      "change": "createScopedHermesMemory({storageRoot}) → (pi) => handle; store + memory tool + policy prompt, no commands, no child_process, no env",
+      "reason": "Fork-owned file. The composition an in-process multi-tenant host can load.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "tests/scoped/multi-tenant.test.ts",
+      "status": "applied",
+      "surface": "scoped entry",
+      "change": "7 cases: two tenants isolated in one process, duplicate-root refusal, erasure after dispose, root validation",
+      "reason": "Fork-owned file. The isolation invariant needs a test, not a comment.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
     },
     {
       "path": "src/index.ts",

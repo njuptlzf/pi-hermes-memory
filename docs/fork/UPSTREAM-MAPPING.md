@@ -103,3 +103,73 @@ What still cannot be automated, and must be caught in review: a *wrong* change
 inside a declared file. The gate proves "only declared files diverged"; it
 cannot prove "the declared change is correct". That is what the test suite and
 the merge drill are for.
+
+---
+
+## 6. Host wiring — agent-chat, and the two things it changed about the design
+
+agent-chat loads extensions as **factories**, not paths:
+
+```ts
+// packages/server/src/session.ts (host side, unchanged by this fork)
+const memoryExtensions = product.memoryEnabled
+  ? [scopedMemory({ dir: path.join(opts.dataDir, "memory", opts.userId, opts.qual || "default"), autoCapture: true })]
+  : [];
+...
+extensionFactories: [...mcpExtensions, ...confirmExtensions, ...memoryExtensions],
+```
+
+so the hermes equivalent is a drop-in of the same shape, one tenant per session:
+
+```ts
+import { createScopedHermesMemory } from "pi-hermes-memory/scoped";
+
+const memoryExtensions = product.memoryEnabled
+  ? [createScopedHermesMemory({
+      storageRoot: path.join(opts.dataDir, "memory", opts.userId, opts.qual || "default"),
+    })]
+  : [];
+```
+
+Two consequences that were not visible from the roadmap:
+
+1. **The tenant root arrives by closure, not by env.** `createScopedHermesMemory(
+   { storageRoot })` returns `(pi) => handle`, so per-session binding needs no
+   `process.env`, no flag, and no process-global "current tenant" — the trap
+   §2 of the roadmap warns about is avoided by construction rather than by
+   discipline. That is also why the entry is a separate file from `src/index.ts`:
+   the admission gate rejects `process.env`, `os.homedir()`, `child_process` and
+   `registerCommand` in the declared file, and hermes' default entry has all
+   four. `createScopedHermesMemory` is composed only of store + write tool +
+   policy prompt.
+
+   Audit result (agent-chat's own `auditExtensionSource`, run against
+   `src/scoped/entry.ts`): criteria ②③④ pass; ① no default export is reported
+   for the *module*, which is expected — the adapter file the host declares is
+   the one that must `export default (pi) => createScopedHermesMemory({...})(pi)`.
+
+2. **`bindExtensions` is conditional in the host.** `session.ts` only calls
+   `session.bindExtensions(...)` when `mcpExtensions.length > 0 ||
+   product.extensionPaths.length > 0`. A memory-only product therefore never
+   binds, so `session_start` / `before_agent_start` never fire and the policy
+   prompt would never be injected — the tools would still work. Either broaden
+   that condition in the host, or have the host call the handle's `ready` and
+   build its own prompt section. Not a fork bug; a wiring fact the fork has to
+   state out loud because silence here looks like "memory works" when only the
+   write half does.
+
+3. **Erasure needs the lock database closed.** Windows refuses to remove the
+   tenant directory while `.pi-hermes-locks.sqlite` is open, and that file sits
+   in the tenant's storage root, not in `memory/`. `dispose()` closes exactly
+   that coordinator (new `AtomicLockCoordinator.closeHandle()`), so
+   "one `rm -rf` = one tenant gone" holds on Windows and does not disturb other
+   tenants. `tests/scoped/multi-tenant.test.ts` asserts the delete succeeds.
+
+### Diff counters after this slice
+
+| Counter | Value |
+| --- | --- |
+| Upstream files modified | 3 (`package.json` scripts, `src/config.ts` additive, `src/store/atomic-lock-coordinator.ts` additive) |
+| Fork-owned files added | 10 |
+| Engine files whose **existing** lines changed | 0 — all three edits are additions |
+| Hunks inside functions upstream edits | 0 |
