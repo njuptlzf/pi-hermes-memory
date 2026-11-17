@@ -1,0 +1,157 @@
+{
+  "$comment": "Fork-delta registry for njuptlzf/pi-hermes-memory (fork of chandra447/pi-hermes-memory). Read by scripts/upstream-divergence.mjs (`npm run upstream:check`). status=planned means we intend to diverge but have not yet; status=applied means we already do — the check fails if an `applied` entry stops diverging (upstream absorbed it, or the change was lost). baseBlob pins the upstream file at the baseline ref so the check can warn when upstream moves under us.",
+  "upstreamBaseline": "v0.11.0",
+  "baselineCommit": "ccdae89064e52a72a1cf55043e7a21964108fa31",
+  "entries": [
+    {
+      "path": "src/paths.ts",
+      "status": "planned",
+      "surface": "storage-root resolver",
+      "change": "AGENT_ROOT splits into storageRoot (per scope, injected) and runtimeRoot (global, for pi module discovery); resolveAgentRoot stays as the runtime-root default",
+      "reason": "The whole point of the fork: one directory per (user, sub-scope), chosen by the host.",
+      "risk": "edit",
+      "anchors": ["AGENT_ROOT", "resolveAgentRoot", "resolveProjectsRoot", "normalizeProjectsMemoryDir"],
+      "baseBlob": "ccc1b7183731564d1bc9b723f89abe375237a682"
+    },
+    {
+      "path": "src/config.ts",
+      "status": "planned",
+      "surface": "config resolution",
+      "change": "carry the injected storageRoot through config; no env/cwd discovery for memory paths",
+      "reason": "2 of the 27 AGENT_ROOT references; config is the natural carrier for the root.",
+      "risk": "edit",
+      "anchors": ["AGENT_ROOT"],
+      "baseBlob": "13445e3a7f32aec9d5130b746337a4152c046abf"
+    },
+    {
+      "path": "src/index.ts",
+      "status": "planned",
+      "surface": "extension entry",
+      "change": "wrap the existing default export in an option-taking factory, e.g. createScopedHermesMemory({ storageRoot })",
+      "reason": "Entry is already a per-run factory; wrapping from outside keeps upstream's function body intact (avoids the same-function-body conflict class).",
+      "risk": "wrap",
+      "anchors": ["export default function"],
+      "baseBlob": "3b3b080aa45f680ced0d94bd92c234713829c231"
+    },
+    {
+      "path": "src/handlers/index-sessions.ts",
+      "status": "planned",
+      "surface": "session indexing",
+      "change": "SESSIONS_DIR (import-time constant, line 14) becomes lazy / parameter-supplied",
+      "reason": "1 of the 2 import-time constants; must not resolve at import time or the fork cannot honour a per-run root.",
+      "risk": "edit",
+      "anchors": ["SESSIONS_DIR", "AGENT_ROOT"],
+      "baseBlob": "21b7ea13b6bc40adb58328fc5bf536452e8e9bfb"
+    },
+    {
+      "path": "src/tools/session-search-tool.ts",
+      "status": "planned",
+      "surface": "session search tool",
+      "change": "DEFAULT_SESSIONS_DIR (import-time constant, line 30) becomes lazy / parameter-supplied",
+      "reason": "The second import-time constant; already has an options.sessionsDir override to hook into.",
+      "risk": "edit",
+      "anchors": ["DEFAULT_SESSIONS_DIR", "sessionsDir"],
+      "baseBlob": "85d1008109332173d0c83008379e53ee70fd338f"
+    },
+    {
+      "path": "src/store/skill-store.ts",
+      "status": "planned",
+      "surface": "skill store",
+      "change": "storage root threaded in instead of read from AGENT_ROOT",
+      "reason": "Bypasses config today; 2 references.",
+      "risk": "edit",
+      "anchors": ["AGENT_ROOT"],
+      "baseBlob": "d22419ece25d2090af172c1bf184d6be0f90b772"
+    },
+    {
+      "path": "src/handlers/auto-consolidate.ts",
+      "status": "planned",
+      "surface": "consolidation lock",
+      "change": "lock directory derived from the injected root, never from a process-global",
+      "reason": "Two scopes in one process must not share a consolidation lock; a global setter would also cross directories under concurrency.",
+      "risk": "edit",
+      "anchors": ["AGENT_ROOT"],
+      "baseBlob": "bb0ca22960e6bfb5b9986f5828e50f0773d4eff5"
+    },
+    {
+      "path": "src/handlers/sync-markdown-memories.ts",
+      "status": "planned",
+      "surface": "markdown memory sync",
+      "change": "root parameter instead of AGENT_ROOT",
+      "reason": "4 references, the densest consumer after paths.ts.",
+      "risk": "edit",
+      "anchors": ["AGENT_ROOT"],
+      "baseBlob": "41d2cf338b1c4db534ab5d936c36a5cfc6984ce7"
+    },
+    {
+      "path": "src/handlers/pi-child-process.ts",
+      "status": "planned",
+      "surface": "pi runtime child process",
+      "change": "keep runtime module-discovery root on the global AGENT_ROOT (line 239); only memory storage follows the scope",
+      "reason": "Dual-root hazard: scoping this root would break pi module discovery for every session.",
+      "risk": "edit",
+      "anchors": ["AGENT_ROOT"],
+      "baseBlob": "02a89a71273931d84f42846a6f8caf463056dee8"
+    },
+    {
+      "path": "src/store/recovery-maintenance.ts",
+      "status": "planned",
+      "surface": "recovery maintenance",
+      "change": "root parameter instead of AGENT_ROOT",
+      "reason": "1 reference; single-line surface.",
+      "risk": "edit",
+      "anchors": ["AGENT_ROOT"],
+      "baseBlob": "2dd1506a44b3f11a837a70b3b2dad9b6f175b94e"
+    },
+    {
+      "path": "src/constants.ts",
+      "status": "planned",
+      "surface": "routing guidance prompt",
+      "change": "buildMemoryTargetRoutingGuidance() (line 230) rewritten to scope-relative wording instead of user/memory/failure global targets",
+      "reason": "This one function is what teaches the model to write outside the scope; it is the only prompt-side change needed.",
+      "risk": "edit",
+      "anchors": ["buildMemoryTargetRoutingGuidance"],
+      "baseBlob": "71db9f0174d08339d8b901cee1c498a0c0df4acc"
+    },
+    {
+      "path": "package.json",
+      "status": "applied",
+      "surface": "npm scripts",
+      "change": "adds upstream:check / upstream:check:ci scripts only; package name, version, deps untouched",
+      "reason": "The gate needs an entry point; scripts-only edits merge trivially.",
+      "risk": "edit",
+      "anchors": ["\"scripts\""],
+      "baseBlob": "35289a9336d4e407fa1825e0083528f78e538ead"
+    },
+    {
+      "path": "docs/fork/UPSTREAM-MAPPING.md",
+      "status": "applied",
+      "surface": "fork documentation",
+      "change": "surface map with per-row upstream call-site evidence",
+      "reason": "Fork-owned file; never conflicts on merge.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "docs/fork/divergences.json",
+      "status": "applied",
+      "surface": "fork registry",
+      "change": "this registry",
+      "reason": "Fork-owned file; never conflicts on merge.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "scripts/upstream-divergence.mjs",
+      "status": "applied",
+      "surface": "sync gate",
+      "change": "blocking divergence check (npm run upstream:check)",
+      "reason": "Fork-owned file; never conflicts on merge.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    }
+  ]
+}

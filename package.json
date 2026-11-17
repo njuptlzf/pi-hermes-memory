@@ -20,7 +20,9 @@
     "check": "node scripts/ensure-dev.mjs check && tsc --noEmit",
     "check:min-sdk": "node scripts/ensure-dev.mjs check && node scripts/check-min-sdk.mjs",
     "check:production": "node scripts/check-production-install.mjs",
-    "test": "node scripts/ensure-dev.mjs test && tests/run-all.sh"
+    "test": "node scripts/ensure-dev.mjs test && tests/run-all.sh",
+    "upstream:check": "node scripts/upstream-divergence.mjs",
+    "upstream:check:ci": "node scripts/upstream-divergence.mjs --no-fetch --no-color"
   },
   "keywords": [
     "pi-package",
