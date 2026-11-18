@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0-scoped.2] - 2026-11-18
+
+Fork-only prerelease. Published as `@njuptlzf/pi-hermes-memory` under `next`.
+
+### Added
+- **`memory_search` in the scoped (multi-tenant) entry**: the existing FTS5 retrieval tool is now mounted with one SQLite mirror per scope under `layout.memoryDir`. Markdown is seeded into the mirror on open (idempotent, fingerprint-gated), and writes are mirrored through the tool's reconcile observer. The shared cross-scope profile is mirrored into the calling scope so `user` entries are searchable in the same session.
+- The scoped policy prompt now advertises `memory_search` (`hasSearch: true`) — the flag flips only together with the code that mounts the tool.
+
+### Fixed
+- The scoped handle now closes its SQLite connection and lock handle on `dispose`/`erase`, so the tenant directory is removable on Windows.
+
 ## [0.11.0] - 2026-11-11
 
 ### Added
