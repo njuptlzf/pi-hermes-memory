@@ -38,9 +38,18 @@ Revisit only if an eval set shows FTS5 recall is insufficient.
 
 | Item | Status | Depends on |
 | --- | --- | --- |
-| Auto-consolidation in scoped entry | not mounted | **host LLM-injection channel** |
-| Background review in scoped entry | not mounted | **host LLM-injection channel** |
-| Session flush in scoped entry | not mounted | **host LLM-injection channel** |
+| Host LLM-injection contract | done in agent-chat (`feat/memory-llm-cap` `9ffca33`) | — |
+| Auto-consolidation in scoped entry | done (`51aa48b`), not yet published | host `complete` callback |
+| Background review in scoped entry | not mounted | same `complete` callback |
+| Session flush in scoped entry | not mounted | same `complete` callback |
+
+The injection contract (`MemoryCompletion`: system+user → text, host owns
+timeout/budget) landed in agent-chat's protocol + `session.ts` via
+`createMemoryCompletion`, which adapts `modelRuntime.completeSimple` (same
+model as the chat session, out-of-band from its history, no failover).
+The scoped fork consumes it in `src/scoped/consolidation.ts`: bounded,
+atomic-shrink, structured failure, no spawn/env/credentials. Review and flush
+can reuse the same callback; they are the remaining P0 work.
 
 Root cause: these three need an LLM call. Their existing implementations reach
 one only through (a) `pi.exec()` subprocess — forbidden by
