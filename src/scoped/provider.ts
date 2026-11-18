@@ -18,7 +18,7 @@
 import { openScopedHermesMemory, type ScopedHermesHandle } from "./entry.js";
 
 /** Must equal package.json `version`; a test asserts it, so a release cannot drift. */
-export const PROVIDER_VERSION = "0.11.0-scoped.1";
+export const PROVIDER_VERSION = "0.11.0-scoped.2";
 
 export const PROVIDER_ID = "hermes-scoped";
 
