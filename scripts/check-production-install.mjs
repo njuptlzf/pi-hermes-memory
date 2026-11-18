@@ -51,7 +51,7 @@ try {
   await mkdir(install);
   await writeFile(join(install, "package.json"), JSON.stringify({ name: "production-smoke", private: true }));
   npm(["install", "--omit=dev", "--omit=peer", "--ignore-scripts", "--no-audit", "--no-fund", join(root, packed.filename)], install);
-  const installed = join(install, "node_modules", "pi-hermes-memory");
+  const installed = join(install, "node_modules", "@njuptlzf", "pi-hermes-memory");
   const requireFromPackage = createRequire(join(installed, "package.json"));
   for (const specifier of ["@earendil-works/pi-ai/compat", "@earendil-works/pi-coding-agent"]) {
     assert.throws(() => requireFromPackage.resolve(specifier), { code: "MODULE_NOT_FOUND" });
