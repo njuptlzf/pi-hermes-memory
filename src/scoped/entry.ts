@@ -30,6 +30,8 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { defaultMemoryConfig } from "../config.js";
+import { consolidateViaCompletion } from "./consolidation.js";
+import type { MemoryCompletion } from "./completion-types.js";
 import { AtomicLockCoordinator } from "../store/atomic-lock-coordinator.js";
 import { DatabaseManager } from "../store/db.js";
 import { MemoryStore } from "../store/memory-store.js";
@@ -51,6 +53,11 @@ export interface ScopedHermesOptions extends ScopedRootInput {
   readonly injectPrompt?: boolean;
   /** Max characters of shared profile injected into the prompt. Default: 1200. */
   readonly profilePromptChars?: number;
+  /**
+   * Host-injected background LLM completion. When present, auto-consolidation
+   * is mounted; when absent, the tenant still reads/writes/searches normally.
+   */
+  readonly complete?: MemoryCompletion;
 }
 
 export interface EraseOptions {
@@ -264,6 +271,17 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
       // it the search tool is mounted but would never see new memories.
       registerMemoryTool(pi, store, () => null, dbManager);
       registerMemorySearchTool(pi, dbManager, { usageTrackingEnabled: config.usageHitTrackingEnabled });
+
+      // Auto-consolidation is opt-in by capability: only mount it when the host
+      // injected a completion callback. The layered store routes this to the
+      // scope store, which owns memory/failure (the profile is capped small and
+      // never consolidated, by design — see layered-store.ts).
+      if (options.complete !== undefined) {
+        const complete = options.complete;
+        store.setConsolidator((target, signal) =>
+          consolidateViaCompletion(store, { target, complete, signal }),
+        );
+      }
     },
     async erase(eraseOptions?: EraseOptions) {
       await ready;

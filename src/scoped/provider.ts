@@ -16,6 +16,7 @@
  */
 
 import { openScopedHermesMemory, type ScopedHermesHandle } from "./entry.js";
+import type { MemoryCompletion } from "./completion-types.js";
 
 /** Must equal package.json `version`; a test asserts it, so a release cannot drift. */
 export const PROVIDER_VERSION = "0.11.0-scoped.2";
@@ -32,6 +33,12 @@ interface ProviderContext {
   readonly sharedRoot?: string | null;
   readonly agentDir?: string;
   readonly scope?: { readonly userId: string; readonly productId: string; readonly qual: string };
+  /**
+   * Host-injected background LLM completion. Optional: when absent, the tenant
+   * mounts read/write + search but no auto-consolidation, and the memory write
+   * path is unaffected. Structurally matches the host's MemoryCompletion.
+   */
+  readonly complete?: MemoryCompletion;
 }
 
 interface ProviderSession {
@@ -59,6 +66,7 @@ const provider: ScopedHermesProvider = {
     const tenant: ScopedHermesHandle = openScopedHermesMemory({
       storageRoot: ctx.storageRoot,
       sharedRoot: ctx.sharedRoot ?? null,
+      complete: ctx.complete,
     });
     return {
       providerId: PROVIDER_ID,
