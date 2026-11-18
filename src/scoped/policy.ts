@@ -15,7 +15,7 @@
  */
 
 export interface ScopedPolicyOptions {
-  /** `memory_search` is mounted (it is not, in the scoped entry today). */
+  /** `memory_search` is mounted with a per-scope FTS5 mirror. */
   readonly hasSearch?: boolean;
   /** `session_search` is mounted. */
   readonly hasSessionSearch?: boolean;

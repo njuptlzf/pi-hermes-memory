@@ -2,16 +2,22 @@
  * Scoped (multi-tenant) entry for pi-hermes-memory.
  *
  * What this is: the tenant-safe composition of hermes' memory core — one
- * `MemoryStore` per scope, a cross-scope profile store per user, the write tool,
- * and a policy prompt built from what is actually mounted. What this is NOT: the
- * full `src/index.ts` surface. TUI commands, the background review loop and
- * session flush are excluded on purpose, for three reasons that are contract
- * requirements of an in-process host, not preferences:
+ * `MemoryStore` per scope, a cross-scope profile store per user, one SQLite
+ * FTS5 mirror per scope, the write tool, the `memory_search` read tool, and a
+ * policy prompt built from what is actually mounted. What this is NOT: the full
+ * `src/index.ts` surface. TUI commands, the background review loop, session
+ * flush and session search are excluded on purpose, for three reasons that are
+ * contract requirements of an in-process host, not preferences:
  *
  *   1. They read `process.env` / `os.homedir()` (host owns configuration).
  *   2. The review loop spawns a `pi` child process, but an in-process host owns
  *      process lifetime.
  *   3. `registerCommand` is a no-op in rpc mode — dead surface that only misleads.
+ *
+ * The search mirror is deliberately per-scope and lives under `memoryDir`: the
+ * host's `runtimeRoot` is shared across tenants and must never hold a tenant's
+ * memory index, and SQLite files are the one resource that outlives a `close()`
+ * on Windows unless released explicitly (see dispose/erase).
  *
  * Two halves, split on purpose: `openScopedHermesMemory()` builds the tenant
  * (stores, prompt text, erasure) and needs no pi; `handle.mount(pi)` attaches
@@ -25,7 +31,13 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { defaultMemoryConfig } from "../config.js";
 import { AtomicLockCoordinator } from "../store/atomic-lock-coordinator.js";
+import { DatabaseManager } from "../store/db.js";
 import { MemoryStore } from "../store/memory-store.js";
+import {
+  reconcileMarkdownFailureScopes,
+  reconcileMarkdownMemoryScope,
+} from "../store/sqlite-memory-store.js";
+import { registerMemorySearchTool } from "../tools/memory-search-tool.js";
 import { registerMemoryTool } from "../tools/memory-tool.js";
 import type { MemoryConfig } from "../types.js";
 import { createLayeredStore } from "./layered-store.js";
@@ -113,11 +125,53 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
     ? scopeStore
     : createLayeredStore({ scopeStore, profileStore });
 
+  // The FTS5 search mirror is a per-tenant SQLite file living next to this
+  // scope's Markdown. It is NOT shared with other scopes of the same user:
+  // sharing it would let one scope's reindex rewrite another's search results
+  // and would make erasure ambiguous. Markdown stays the source of truth —
+  // every mirror row can be rebuilt by reconciling from disk.
+  const dbManager = new DatabaseManager(layout.memoryDir);
+  const dbLockPath = path.join(layout.memoryDir, ".pi-hermes-locks.sqlite");
+
   let disposed = false;
   let mounted = false;
 
+  // Seed the mirror from Markdown on every open. New tenants start empty and
+  // cost two indexed reads; tenants created by an earlier version get their
+  // pre-existing entries indexed. The reconcile functions fingerprint the
+  // entries, so an unchanged reopen is a no-op rather than a rewrite.
+  const seedSearchMirror = (): void => {
+    try {
+      reconcileMarkdownMemoryScope(dbManager, scopeStore.getRawEntriesForSync("memory"), "memory", null);
+      reconcileMarkdownFailureScopes(dbManager, scopeStore.getRawEntriesForSync("failure"));
+      if (profileStore !== null) {
+        reconcileMarkdownMemoryScope(dbManager, profileStore.getRawEntriesForSync("user"), "user", null);
+      }
+    } catch (error: unknown) {
+      // A search index is best-effort: Markdown writes must never fail because
+      // a stale/corrupt mirror could not be seeded. DatabaseManager quarantines
+      // and rebuilds a corrupt file on the next access, so this is recoverable.
+      queueMicrotask(() => {
+        console.error("[scoped-hermes] search mirror seed failed:", error);
+      });
+    }
+  };
+
+  // `registerMemoryTool` wires its reconcile observer through the layered
+  // store, which forwards `setMutationObserver` to the SCOPE store only. The
+  // shared profile has no observer, so without this its writes would be
+  // searchable on the next open (via seed) but not in the current session.
+  if (profileStore !== null) {
+    profileStore.setMutationObserver((_target, entries) => {
+      reconcileMarkdownMemoryScope(dbManager, entries, "user", null);
+      return Promise.resolve(undefined);
+    });
+  }
+
   const ready = Promise.all([scopeStore.loadFromDisk(), profileStore?.loadFromDisk() ?? Promise.resolve()])
-    .then(() => undefined)
+    .then(() => {
+      seedSearchMirror();
+    })
     .catch((error: unknown) => {
       // Surface the failure without turning it into an unhandled rejection when
       // the host never awaits `ready`.
@@ -149,9 +203,9 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
   const promptSection = async (): Promise<string> => {
     await ready;
     const policy = buildScopedMemoryPolicy({
-      // False today because the scoped entry mounts only the write tool. Each of
-      // these flips only together with the code that mounts the tool.
-      hasSearch: false,
+      // A flag may only be true when the matching tool is actually mounted in
+      // mount() below — a prompt that promises an absent tool wastes model turns.
+      hasSearch: true,
       hasSessionSearch: false,
       hasSkills: false,
       hasProjectStore: false,
@@ -205,12 +259,19 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
 
       // No project store in the scoped entry: the tenant root IS the scope, so
       // the per-cwd project layer would re-introduce a shared dimension the host
-      // does not want. `()` keeps the tool's project argument inert.
-      registerMemoryTool(pi, store, () => null);
+      // does not want. `()` keeps the tool's project argument inert. Passing the
+      // dbManager is what mirrors writes into this tenant's FTS5 index; without
+      // it the search tool is mounted but would never see new memories.
+      registerMemoryTool(pi, store, () => null, dbManager);
+      registerMemorySearchTool(pi, dbManager, { usageTrackingEnabled: config.usageHitTrackingEnabled });
     },
     async erase(eraseOptions?: EraseOptions) {
       await ready;
       // Close pinned connections first: Windows refuses to unlink an open file.
+      // Both the markdown-mutation lock and the SQLite handle/lock live under
+      // storageRoot, so all three must be released before the recursive rm.
+      dbManager.close();
+      AtomicLockCoordinator.shared(dbLockPath).closeHandle();
       releaseLock(roots.storageRoot);
       await fs.rm(roots.storageRoot, { recursive: true, force: true });
       claimedRoots.delete(layout.memoryDir);
@@ -224,6 +285,8 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
       if (disposed) return;
       disposed = true;
       await ready;
+      dbManager.close();
+      AtomicLockCoordinator.shared(dbLockPath).closeHandle();
       releaseLock(roots.storageRoot);
       if (roots.sharedRoot !== null) releaseLock(roots.sharedRoot);
       claimedRoots.delete(layout.memoryDir);
