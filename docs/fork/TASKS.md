@@ -115,11 +115,17 @@ machine: `pi-child-process.test.ts` assumed `pi` as the child command
 `skills-command.test.ts` compared a raw POSIX path against a `path.resolve`d
 one; and `package.json`'s test script invoked `tests/run-all.sh` directly
 (cmd.exe cannot run a bash script) — now `bash tests/run-all.sh`.
+`project-rebinding.test.ts` hung in cleanup because it registered the extension
+(opening `sessions.db` + WAL and lock SQLite handles under the temp agent root)
+but never fired `session_shutdown`, so Windows could not unlink the open files
+and `rmTestDir` retried until the runner timed out. The test now emits the full
+shutdown handler chain before teardown; 3/3 fast passes.
 
-Still slow/hangs on this Windows box (pre-existing on clean HEAD, unrelated to
-fork code): `project-rebinding.test.ts` hangs (SQLite handle contention);
-`extension-root-migration.test.ts` and a few store tests exceed the default
-120s per-file timeout. Use `TEST_TIMEOUT=400 npm test`, or run on Linux CI.
+Still slow on this Windows box (pre-existing on clean HEAD, unrelated to fork
+code): `extension-root-migration.test.ts` and a few store tests exceed the
+default 120s per-file timeout. Use `TEST_TIMEOUT=400 npm test`, or run on Linux
+CI. `prompt-injection.test.ts` also leaves handles open but swallows its
+cleanup error and passes.
 
 ## Release mechanics (fork line)
 

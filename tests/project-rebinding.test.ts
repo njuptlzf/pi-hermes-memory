@@ -98,6 +98,16 @@ describe("session project memory rebinding", () => {
       const launchMemory = await fs.readFile(path.join(launchMemoryDir, "MEMORY.md"), "utf-8");
       assert.match(sessionMemory, /session-cwd write/);
       assert.doesNotMatch(launchMemory, /session-cwd write/);
+
+      // Fire the full shutdown lifecycle before cleanup. Registering the
+      // extension opens sessions.db (+ WAL) and lock SQLite handles under
+      // agentRoot; without session_shutdown they stay open, and on Windows
+      // rmTestDir cannot unlink an open SQLite file — it retries until the
+      // test runner times out. Pi emits every shutdown handler in order;
+      // the last one closes the DB manager.
+      for (const handler of mockPi.handlers.session_shutdown ?? []) {
+        await handler({}, sessionCtx);
+      }
     } finally {
       process.chdir(previousCwd);
       if (previousAgentRoot === undefined) delete process.env.PI_CODING_AGENT_DIR;
