@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0-scoped.3] - 2026-11-19
+
+Fork-only prerelease. Published as `@njuptlzf/pi-hermes-memory` under `next`.
+
+### Added
+- **All four P0 memory capabilities in the scoped (multi-tenant) entry**: `memory_search` (per-scope FTS5 mirror), auto-consolidation, background review (turn-triggered) and session flush (shutdown), all wired through a single host-injected `MemoryCompletion` callback. The host owns timeout/budget; the provider never spawns, reads env, or touches credentials.
+- **24-case memory-quality eval set** in CI: recall, boundary and adversarial (prompt injection, out-of-scope targets, oversized input), with a 90% overall / 100% adversarial pass line.
+
+### Fixed
+- **`repository.url` now points at `njuptlzf/pi-hermes-memory`** (was still upstream `chandra447`), which npm requires to match for OIDC trusted publishing. This was the root cause of the `E404` on `npm publish`.
+
 ## [0.11.0-scoped.2] - 2026-11-18
 
 Fork-only prerelease. Published as `@njuptlzf/pi-hermes-memory` under `next`.

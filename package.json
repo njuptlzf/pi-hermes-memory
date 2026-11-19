@@ -1,6 +1,6 @@
 {
   "name": "@njuptlzf/pi-hermes-memory",
-  "version": "0.11.0-scoped.2",
+  "version": "0.11.0-scoped.3",
   "description": "🧠 Persistent memory + 🔍 session search + 🛡️ secret scanning for Pi. Token-aware policy-only memory by default, SQLite FTS5 search, auto-consolidation, procedural skills. 732 tests. Ported from Hermes agent.",
   "type": "module",
   "main": "src/index.ts",
@@ -70,7 +70,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/chandra447/pi-hermes-memory.git"
+    "url": "git+https://github.com/njuptlzf/pi-hermes-memory.git"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": ">=0.80.6",
