@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import * as path from "node:path";
 import {
   buildSkillRows,
   buildUnifiedSkillRows,
@@ -127,7 +128,9 @@ describe("skills command helpers", () => {
 
     assert.strictEqual(loaded.length, 1);
     assert.strictEqual(loaded[0]?.name, "valid");
-    assert.strictEqual(loaded[0]?.path, "/tmp/valid/SKILL.md");
+    // The collector normalizes paths with path.resolve; expect the same value
+    // so the assertion holds on POSIX and Windows alike.
+    assert.strictEqual(loaded[0]?.path, path.resolve("/tmp/valid/SKILL.md"));
   });
 
   it("buildUnifiedSkillRows merges managed and external skills", () => {

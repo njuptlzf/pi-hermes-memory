@@ -468,7 +468,13 @@ describe("execChildPrompt", () => {
     assert.match(calls[0].args[0].replaceAll("\\", "/"), /child-process-watchdog\.mjs$/);
     assert.equal(calls[0].args[1], "30000");
     assert.match(calls[0].args[2], /cancel$/);
-    assert.equal(calls[0].args[3], "pi");
+    // resolveChildPiInvocation is platform-specific: POSIX execs `pi` directly,
+    // Windows falls back to node.exe <pi-cli.js>. Assert the resolved command
+    // rather than hardcoding the POSIX shape.
+    assert.ok(
+      calls[0].args[3] === "pi" || calls[0].args[3] === process.execPath,
+      `unexpected child command: ${calls[0].args[3]}`,
+    );
     assert.equal(calls[0].timeout, 35000);
   });
 
@@ -673,7 +679,12 @@ describe("execChildPrompt", () => {
         assert.match(promptArg, /^@/);
         promptPath = promptArg.slice(1);
         assert.equal(await fs.readFile(promptPath, "utf-8"), secret);
-        assert.equal((await fs.stat(promptPath)).mode & 0o777, 0o600);
+        // Windows does not honour POSIX mode bits on fs.writeFile; it reports
+        // 0o666 regardless. The mode-0600 hardening is meaningful on POSIX
+        // only, so assert it there and skip on win32.
+        if (process.platform !== "win32") {
+          assert.equal((await fs.stat(promptPath)).mode & 0o777, 0o600);
+        }
         return { code: 0, stdout: "ok", stderr: "" };
       },
     };

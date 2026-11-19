@@ -103,12 +103,23 @@ To re-enable, in order:
    the OIDC publish lands (all earlier "successful" runs had skipped publish
    because the version was already on npm).
 
-## Known test flake
+## Test reliability (Windows)
 
-`tests/handlers/background-review.test.ts` has 2 timing-sensitive subtests
-(`exec` call count 0↔1). Reproduced on a clean HEAD worktree — pre-existing,
-unrelated to fork changes. It can fail the `verify` gate's `npm test`, so a
-release dispatch may need a re-run.
+Fixed: `background-review.test.ts`'s `reviewInProgress` subtest used a fixed
+`settle(5)` plus a never-resolving exec; the real `execChildPrompt`'s temp-file
+I/O outlasted the wait on Windows, so the assertion failed and leaked a pending
+review into the next test. Reworked to a deterministic started/gate signal.
+Also fixed three other Windows-only failures that broke `npm test` on this
+machine: `pi-child-process.test.ts` assumed `pi` as the child command
+(Windows resolves `node.exe` + CLI path) and asserted POSIX `0o600` mode bits;
+`skills-command.test.ts` compared a raw POSIX path against a `path.resolve`d
+one; and `package.json`'s test script invoked `tests/run-all.sh` directly
+(cmd.exe cannot run a bash script) — now `bash tests/run-all.sh`.
+
+Still slow/hangs on this Windows box (pre-existing on clean HEAD, unrelated to
+fork code): `project-rebinding.test.ts` hangs (SQLite handle contention);
+`extension-root-migration.test.ts` and a few store tests exceed the default
+120s per-file timeout. Use `TEST_TIMEOUT=400 npm test`, or run on Linux CI.
 
 ## Release mechanics (fork line)
 

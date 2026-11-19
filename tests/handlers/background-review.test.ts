@@ -305,47 +305,49 @@ describe("setupBackgroundReview", () => {
   });
 
   it("reviewInProgress guard prevents double-trigger", async () => {
-    // Use a slow exec that never resolves to keep reviewInProgress true
-    let resolveExec: () => void;
-    const slowPi = {
-      on: (event: string, handler: Function) => {
-        handlers[event] = handlers[event] || [];
-        handlers[event].push(handler);
-      },
-      exec: async (...args: any[]) => {
-        execCalls.push(captureExecArgs(args));
-        await new Promise<void>((r) => { resolveExec = r; });
+    // Drive the review through an injected child runner instead of the real
+    // execChildPrompt. Its temp-file I/O made the old `settle(5)` wait racy on
+    // slower disks, and a never-resolved exec leaked an in-flight review into
+    // the next test. A deterministic "started" signal plus a released gate
+    // fixes both: we know exactly when the review is in flight and we always
+    // let it settle before the test ends.
+    let releaseChild: () => void;
+    const childStarted = Promise.withResolvers<void>();
+    const pi = createMockPi();
+    setup(pi, defaultConfig, {
+      execChildPrompt: async (...args: any[]) => {
+        execCalls.push(args);
+        childStarted.resolve();
+        await new Promise<void>((r) => { releaseChild = r; });
         return { code: 0, stdout: "Saved", stderr: "" };
       },
-      registerTool: () => {},
-      registerCommand: () => {},
-    } as any;
-
-    setup(slowPi, defaultConfig);
+    });
 
     fireMessageEnd("user");
     fireMessageEnd("user");
     fireMessageEnd("user");
 
-    // Fire 10 turn_end events — first triggers review (slow, won't resolve)
+    // Fire 10 turn_end events — first triggers review (child gated below)
     for (let i = 0; i < 10; i++) {
       fireTurnEnd();
     }
-    await settle(5);
+    await childStarted.promise;
 
-    assert.strictEqual(execCalls.length, 1, "exec should be called once for first trigger");
+    try {
+      assert.strictEqual(execCalls.length, 1, "exec should be called once for first trigger");
 
-    // Fire more turn_end events — should be blocked by reviewInProgress
-    for (let i = 0; i < 15; i++) {
-      fireTurnEnd();
+      // The turn_end preamble up to the activeReview guard is synchronous, so
+      // no extra wait is needed to observe a double-trigger being blocked.
+      for (let i = 0; i < 15; i++) {
+        fireTurnEnd();
+      }
+      assert.strictEqual(execCalls.length, 1, "exec should still only be called once — reviewInProgress guard");
+    } finally {
+      // Always release the gate so a failed assertion cannot leak an in-flight
+      // review into the following test's shared call log.
+      releaseChild!();
     }
-    await settle(5);
-
-    assert.strictEqual(execCalls.length, 1, "exec should still only be called once — reviewInProgress guard");
-
-    // Resolve the pending exec to clean up
-    resolveExec!();
-    await settle();
+    await reviewSettledSignal.promise;
   });
 
   it("does NOT trigger for short conversations (< 4 message parts)", async () => {
