@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0-scoped.4] - 2026-11-19
+
+Fork-only prerelease. Published as `@njuptlzf/pi-hermes-memory` under `next`.
+
+### Added
+- **Manual publish script** `scripts/publish-scoped.mjs`: cuts a release from the machine's already-authenticated npm, so the fork is no longer blocked on CI OIDC publishing. It pins the official registry (bypassing stale local mirrors), guards against version drift, a dirty tree, duplicate versions and credential-shaped files in the tarball, and polls npm until the dist-tag propagates. It never reads or logs the token.
+
+### Changed
+- **CI auto-publish deferred to low priority (P3)** in `docs/fork/TASKS.md`: Trusted Publisher cannot be configured without a physical security key on the npm account, so releases are cut by hand until that is resolved.
+
 ## [0.11.0-scoped.3] - 2026-11-19
 
 Fork-only prerelease. Published as `@njuptlzf/pi-hermes-memory` under `next`.

@@ -4,7 +4,7 @@ Fork-owned file. Upstream does not know this path, so a merge never touches it.
 Companion to `docs/fork/UPSTREAM-MAPPING.md` (what the fork is allowed to change)
 and `docs/fork/F0-BASELINE.md` (the measured baseline).
 
-Status verified 2026-11-18 on branch `spike/f0-scoped-entry`.
+Status verified 2026-11-19 on `main` (fork line graduated from `spike/f0-scoped-entry`).
 
 ## Done
 
@@ -18,8 +18,10 @@ Status verified 2026-11-18 on branch `spike/f0-scoped-entry`.
 | **`memory_search` wiring (per-scope FTS5 mirror)** | `cfa6254` | see below |
 | LLM-injection contract + consolidation/review/flush + eval | `51aa48b`, `1cb50de`, `f8f67a2` | all P0 capabilities done |
 | `0.11.0-scoped.3` release + repository.url fix | `232e71d` | published via `scripts/publish-scoped.mjs` |
+| Manual publish script + CI publish deferred to P3 | `bca9830`, `9fca460` | `scripts/publish-scoped.mjs` |
+| Fork line graduated to `main` + `0.11.0-scoped.4` release | — | published under `next` |
 
-Official npm state: `latest = 0.11.0-scoped.1` (untouched), `next = 0.11.0-scoped.3`.
+Official npm state: `latest = 0.11.0-scoped.1` (untouched), `next = 0.11.0-scoped.4`.
 The local `npmmirror.com` mirror lags — do not use it to judge publish state;
 pin `--registry=https://registry.npmjs.org --prefer-online` when verifying.
 
