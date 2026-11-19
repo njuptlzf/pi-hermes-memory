@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **`publish-scoped.mjs` no longer reports a successful publish as a failure** when npm's dist-tag metadata lags behind the upload: the propagation window is now 5 minutes (was 3), and a final `npm view --prefer-online` recheck confirms the tag before giving up.
+
 ## [0.11.0-scoped.4] - 2026-11-19
 
 Fork-only prerelease. Published as `@njuptlzf/pi-hermes-memory` under `next`.

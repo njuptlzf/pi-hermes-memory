@@ -36,6 +36,12 @@ const REGISTRY = "https://registry.npmjs.org";
 const PACKAGE = "@njuptlzf/pi-hermes-memory";
 const ENCODED = "@njuptlzf%2fpi-hermes-memory";
 
+// npm metadata can lag a successful upload by several minutes across its edges.
+// 180s proved too short in practice: the version landed but the script reported
+// failure. Give propagation room, then recheck through npm before giving up.
+const PROPAGATION_TIMEOUT_MS = 300_000;
+const POLL_INTERVAL_MS = 5_000;
+
 const argv = process.argv.slice(2);
 const dryRun = argv.includes("--dry-run");
 const tagIndex = argv.indexOf("--tag");
@@ -113,6 +119,20 @@ async function registryMeta() {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Re-check a dist-tag through npm itself with `--prefer-online`, which bypasses
+ * npm's local cache and any stale edge. Returns the resolved version string, or
+ * null on failure. Independent of registryMeta()'s raw fetch so one stale path
+ * cannot mask a publish that actually landed.
+ */
+function npmViewTag(tag) {
+  return run(
+    NPM,
+    ["view", `${PACKAGE}@${tag}`, "version", "--registry", REGISTRY, "--prefer-online"],
+    { capture: true },
+  );
+}
+
 async function main() {
   const version = packageVersion();
 
@@ -161,8 +181,9 @@ async function main() {
   console.log(`[publish-scoped] publishing ${PACKAGE}@${version} under ${tag}...`);
   run(NPM, ["publish", "--access", "public", "--tag", tag, "--registry", REGISTRY]);
 
-  // Bounded propagation check: npm's metadata lags the upload by ~1-2 minutes.
-  const deadline = Date.now() + 180_000;
+  // Bounded propagation check via the raw registry (cache-busted). npm's
+  // metadata can take a few minutes to reach every edge.
+  const deadline = Date.now() + PROPAGATION_TIMEOUT_MS;
   let published = false;
   while (Date.now() < deadline) {
     const after = await registryMeta();
@@ -170,10 +191,20 @@ async function main() {
       published = true;
       break;
     }
-    await sleep(5_000);
+    await sleep(POLL_INTERVAL_MS);
+  }
+
+  // The cached packument can lag behind a successful upload. Before declaring
+  // failure, ask npm directly with --prefer-online: if the tag resolves to our
+  // version there, the publish landed and it was only a propagation delay.
+  if (!published) {
+    console.log(`[publish-scoped] raw registry did not show ${tag} -> ${version} within ${PROPAGATION_TIMEOUT_MS / 1000}s; rechecking with npm --prefer-online...`);
+    if (npmViewTag(tag) === version) {
+      published = true;
+    }
   }
   if (!published) {
-    fail(`upload returned success but ${tag} did not reach ${version} within 180s. Check: npm view ${PACKAGE}@${version} --registry ${REGISTRY} --prefer-online`);
+    fail(`upload returned success but ${tag} did not reach ${version} within ${PROPAGATION_TIMEOUT_MS / 1000}s, and npm --prefer-online disagreed. Check: npm view ${PACKAGE}@${tag} --registry ${REGISTRY} --prefer-online`);
   }
   console.log(`[publish-scoped] verified: ${tag} -> ${version} on ${REGISTRY}`);
 }
