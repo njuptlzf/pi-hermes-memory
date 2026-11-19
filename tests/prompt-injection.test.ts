@@ -18,6 +18,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { after, beforeEach, describe, it } from "node:test";
+import { rmTestDir } from "./helpers/cleanup.js";
 
 // Bind the entry point to a disposable agent root, never the user's memory.
 const root = await fs.mkdtemp(path.join(os.tmpdir(), "pi-prompt-injection-"));
@@ -62,6 +63,10 @@ function legacyOptions(overrides: Record<string, unknown> = {}) {
 
 let handlers: Record<string, Array<(event: any, ctx: any) => any>>;
 let ctx: any;
+// registerWith() re-registers the extension for every test (each open() starts
+// a DatabaseManager + lock handles). Collect every shutdown handler so teardown
+// can close all of them; otherwise Windows cannot unlink the open SQLite files.
+const shutdownHandlers: Array<(event: any, ctx: any) => any> = [];
 
 async function configure(overrides: Record<string, unknown> = {}) {
   await fs.writeFile(path.join(root, "hermes-memory-config.json"), JSON.stringify({
@@ -78,7 +83,10 @@ async function configure(overrides: Record<string, unknown> = {}) {
 
 function register() {
   registerExtension({
-    on(event: string, handler: any) { (handlers[event] ??= []).push(handler); },
+    on(event: string, handler: any) {
+      (handlers[event] ??= []).push(handler);
+      if (event === "session_shutdown") shutdownHandlers.push(handler);
+    },
     registerTool() {},
     registerCommand() {},
   } as any);
@@ -109,13 +117,19 @@ beforeEach(async () => {
 });
 
 after(async () => {
+  // Close every DatabaseManager/lock handle opened by registerWith() before
+  // removing the root. On Windows an open SQLite file cannot be unlinked, so
+  // a swallowed fs.rm error used to leak temp dirs on every run.
+  for (const handler of shutdownHandlers) {
+    try {
+      await handler({}, ctx);
+    } catch {
+      // Teardown is best-effort; one failed handler must not skip the others.
+    }
+  }
   if (previousRoot === undefined) delete process.env.PI_CODING_AGENT_DIR;
   else process.env.PI_CODING_AGENT_DIR = previousRoot;
-  try {
-    await fs.rm(root, { recursive: true, force: true });
-  } catch {
-    // Windows may keep the directory busy briefly; the temp dir is disposable.
-  }
+  await rmTestDir(root);
 });
 
 describe("before_agent_start prompt injection", () => {

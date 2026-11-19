@@ -124,8 +124,14 @@ shutdown handler chain before teardown; 3/3 fast passes.
 Still slow on this Windows box (pre-existing on clean HEAD, unrelated to fork
 code): `extension-root-migration.test.ts` and a few store tests exceed the
 default 120s per-file timeout. Use `TEST_TIMEOUT=400 npm test`, or run on Linux
-CI. `prompt-injection.test.ts` also leaves handles open but swallows its
-cleanup error and passes.
+CI. `prompt-injection.test.ts` had the same open-handle issue (registerWith()
+re-registers the extension 5× without shutdown); it now collects every shutdown
+handler and fires them before `rmTestDir`, so no temp dirs leak.
+`tests/run-all.sh` went through `npx` for every file (~50 npm startups); under
+long-suite pressure npm intermittently died with "Could not determine Node.js
+install directory" and nested spawns stalled. It now prefers the checkout's
+local `node_modules/.bin/tsx` and falls back to `npx tsx` only without a local
+install. These make the default-timeout full suite deterministic.
 
 ## Release mechanics (fork line)
 

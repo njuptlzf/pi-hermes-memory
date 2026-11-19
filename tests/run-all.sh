@@ -18,12 +18,23 @@ if [[ ! "$TEST_TIMEOUT" =~ ^0+([.]0+)?$ ]]; then
   fi
 fi
 
+# Prefer the checkout's local tsx shim. Going through `npx` for every file
+# means ~50 npm startups; under the process pressure of a long suite npm can
+# fail with "Could not determine Node.js install directory" (observed on
+# Windows). The local shim avoids npm entirely. Fall back to `npx tsx` only
+# when there is no local install (e.g. run straight from a fresh clone).
+if [[ -x node_modules/.bin/tsx ]]; then
+  TSX_RUNNER=(node_modules/.bin/tsx)
+else
+  TSX_RUNNER=(npx tsx)
+fi
+
 run_test_file() {
   local file="$1"
   if ((${#TIMEOUT_BIN[@]} > 0)); then
-    "${TIMEOUT_BIN[@]}" --kill-after=5s "$TEST_TIMEOUT" npx tsx --test "$file"
+    "${TIMEOUT_BIN[@]}" --kill-after=5s "$TEST_TIMEOUT" "${TSX_RUNNER[@]}" --test "$file"
   else
-    npx tsx --test "$file"
+    "${TSX_RUNNER[@]}" --test "$file"
   fi
 }
 
