@@ -42,6 +42,9 @@ const tagIndex = argv.indexOf("--tag");
 const tag = tagIndex !== -1 ? argv[tagIndex + 1] : "next";
 
 if (tagIndex !== -1 && !tag) fail("--tag requires a value");
+// dist-tags are a strict token; also the only user-supplied string that reaches
+// a shell on Windows, so reject shell metacharacters here rather than escaping.
+if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(tag)) fail(`invalid dist-tag: ${JSON.stringify(tag)}`);
 if (argv.some((a) => a.startsWith("--") && a !== "--dry-run" && a !== "--tag")) {
   fail(`unknown flag: ${argv.find((a) => a.startsWith("--") && a !== "--dry-run" && a !== "--tag")}`);
 }
@@ -51,9 +54,16 @@ function fail(message) {
   process.exit(1);
 }
 
+// Windows ships npm as npm.cmd, which only spawns through the shell. Shell
+// invocation means arguments must be validated (see the tag check below) so a
+// user-supplied --tag can never become a shell metacharacter.
+const WIN = process.platform === "win32";
+const NPM = WIN ? "npm.cmd" : "npm";
+
 function run(cmd, args, options = {}) {
   const result = spawnSync(cmd, args, {
     cwd: ROOT,
+    shell: WIN,
     stdio: options.capture ? "pipe" : "inherit",
     encoding: "utf8",
   });
@@ -128,7 +138,7 @@ async function main() {
 
   // Credential guard + build, same lifecycle steps npm publish would run.
   console.log(`[publish-scoped] running credential guard...`);
-  run("npm", ["run", "prepublishOnly"]);
+  run(NPM, ["run", "prepublishOnly"]);
 
   const meta = await registryMeta();
   if (!meta) fail("cannot reach npm registry metadata");
@@ -149,7 +159,7 @@ async function main() {
   }
 
   console.log(`[publish-scoped] publishing ${PACKAGE}@${version} under ${tag}...`);
-  run("npm", ["publish", "--access", "public", "--tag", tag, "--registry", REGISTRY]);
+  run(NPM, ["publish", "--access", "public", "--tag", tag, "--registry", REGISTRY]);
 
   // Bounded propagation check: npm's metadata lags the upload by ~1-2 minutes.
   const deadline = Date.now() + 180_000;
