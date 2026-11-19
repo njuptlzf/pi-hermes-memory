@@ -4,8 +4,8 @@
  * The full entry consolidates through `pi.exec()` subprocesses or pi's
  * modelRegistry — both unavailable to a provider mounted inside a host that
  * owns process lifetime and credentials. The scoped port instead receives a
- * `MemoryCompletion` callback from the host (see the protocol contract) and
- * stays a pure consumer: no spawn, no env, no model/credential access.
+ * `MemoryCompletion` callback from the host and stays a pure consumer: no
+ * spawn, no env, no model/credential access.
  *
  * Bounded by construction: one completion per trigger, the host owns the hard
  * timeout/budget on the callback, and application is atomic-shrink only. Any
@@ -14,10 +14,7 @@
  */
 
 import type { MemoryCompletion } from "./completion-types.js";
-import {
-  applyReviewOperations,
-  parseReviewOperations,
-} from "../handlers/review-memory-ops.js";
+import { runMemoryOps } from "./memory-ops.js";
 import type { MemoryStore } from "../store/memory-store.js";
 import { DIRECT_CONSOLIDATION_SYSTEM_PROMPT, ENTRY_DELIMITER } from "../constants.js";
 import type { ConsolidationResult } from "../types.js";
@@ -72,33 +69,16 @@ export async function consolidateViaCompletion(
     `Only emit operations with "target": "${toolTarget}".`,
   ].join("\n");
 
-  let completion;
-  try {
-    completion = await complete({ systemPrompt: DIRECT_CONSOLIDATION_SYSTEM_PROMPT, userPrompt, signal });
-  } catch (err) {
-    // A host callback that throws is a host bug, but it must not break the
-    // memory write that triggered consolidation.
-    return { consolidated: false, error: err instanceof Error ? err.message : String(err) };
-  }
+  const outcome = await runMemoryOps({
+    store,
+    systemPrompt: DIRECT_CONSOLIDATION_SYSTEM_PROMPT,
+    userPrompt,
+    complete,
+    signal,
+    requireShrink: true,
+    expectedTarget: toolTarget,
+  });
 
-  if (!completion.ok) return { consolidated: false, error: completion.error ?? "completion failed" };
-  if (signal?.aborted) return { consolidated: false, error: "aborted" };
-
-  const operations = parseReviewOperations(completion.text);
-  if (operations === null) return { consolidated: false, error: "could not parse consolidation operations" };
-  if (operations.length === 0) return { consolidated: false, error: "completion produced no operations" };
-
-  try {
-    const applied = await applyReviewOperations(store, null, operations, null, null, {
-      requireAtomicShrink: true,
-      expectedTarget: toolTarget,
-      signal,
-    });
-    if (applied.aborted && applied.appliedCount === 0) return { consolidated: false, error: "aborted" };
-    if (applied.error) return { consolidated: false, error: applied.error };
-    if (applied.appliedCount === 0) return { consolidated: false, error: "no operations applied" };
-    return { consolidated: true };
-  } catch (err) {
-    return { consolidated: false, error: err instanceof Error ? err.message : String(err) };
-  }
+  if (outcome.ok && outcome.appliedCount > 0) return { consolidated: true };
+  return { consolidated: false, error: outcome.error ?? "no operations applied" };
 }

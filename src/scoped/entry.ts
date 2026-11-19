@@ -31,6 +31,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { defaultMemoryConfig } from "../config.js";
 import { consolidateViaCompletion } from "./consolidation.js";
+import { setupScopedReviewFlush } from "./review-flush.js";
 import type { MemoryCompletion } from "./completion-types.js";
 import { AtomicLockCoordinator } from "../store/atomic-lock-coordinator.js";
 import { DatabaseManager } from "../store/db.js";
@@ -281,6 +282,9 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
         store.setConsolidator((target, signal) =>
           consolidateViaCompletion(store, { target, complete, signal }),
         );
+        // Background review (turn-triggered) and flush (shutdown), using the
+        // same injected completion. Off when no capability was injected.
+        setupScopedReviewFlush(pi, { store, complete });
       }
     },
     async erase(eraseOptions?: EraseOptions) {
