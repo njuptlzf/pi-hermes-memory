@@ -15,11 +15,13 @@ Status verified 2026-11-18 on branch `spike/f0-scoped-entry`.
 | Publishable package + host-neutral provider descriptor | `ee3d8dd` | `@njuptlzf/pi-hermes-memory`, `hermes-scoped` |
 | Publish under scoped name + credential guard | `32f3258`, `ce48f29` | `prepublishOnly` rejects credential-shaped files |
 | Release smoke fix | `a505420` | tag `v0.11.0-scoped.1` |
-| **`memory_search` wiring (per-scope FTS5 mirror)** | `cfa6254` | this branch's tip; see below |
+| **`memory_search` wiring (per-scope FTS5 mirror)** | `cfa6254` | see below |
+| LLM-injection contract + consolidation/review/flush + eval | `51aa48b`, `1cb50de`, `f8f67a2` | all P0 capabilities done |
+| `0.11.0-scoped.3` release + repository.url fix | `232e71d` | published via `scripts/publish-scoped.mjs` |
 
-`0.11.0-scoped.1` is live on the official registry (`latest` and `next` both
-point at it). The local `npmmirror.com` mirror lags at `0.0.0-stage` — do not
-use the mirror to judge publish state.
+Official npm state: `latest = 0.11.0-scoped.1` (untouched), `next = 0.11.0-scoped.3`.
+The local `npmmirror.com` mirror lags — do not use it to judge publish state;
+pin `--registry=https://registry.npmjs.org --prefer-online` when verifying.
 
 ## Retrieval wiring (`cfa6254`) — what it did and did not do
 
@@ -34,7 +36,7 @@ Did **not**: add vector / hybrid semantic retrieval. The repo has never had
 compact context + full injection + on-demand search policy, not vector search.
 Revisit only if an eval set shows FTS5 recall is insufficient.
 
-## P0 remaining — all blocked on one prerequisite
+## P0 — complete (2026-11-19)
 
 | Item | Status | Depends on |
 | --- | --- | --- |
@@ -53,30 +55,13 @@ timeout/budget) landed in agent-chat's protocol + `session.ts` via
 model as the chat session, out-of-band from its history, no failover).
 The scoped fork consumes it in `src/scoped/consolidation.ts`: bounded,
 atomic-shrink, structured failure, no spawn/env/credentials. Review and flush
-can reuse the same callback; they are the remaining P0 work.
+reuse the same `runMemoryOps` runner — no upstream handler was modified.
 
-Root cause: these three need an LLM call. Their existing implementations reach
-one only through (a) `pi.exec()` subprocess — forbidden by
-`extension-admission.ts` ("no spawn, no env" in a provider factory), or (b)
-`DirectReviewContext` (`model` / `modelRegistry` / `sessionManager`), which the
-full entry gets from `index.ts:360 runAutoConsolidation` but the scoped entry
-never receives.
-
-Host contract `packages/protocol/src/memory-provider.ts` exposes only
-`storageRoot` / `sharedRoot` / `agentDir` / `scope` and
-`factory` / `promptSection` / `erase` / `dispose` — **no completion/LLM field**.
-Therefore this is contract extension, not wiring.
-
-### Prerequisite: extend the host contract
-
-1. Decide the injection shape (runJob-style callback: signature, timeout,
-   permission, error type). Cross-repo change: agent-chat (worktree only) +
-   this fork.
-2. `[待核实: read packages/server/src/session.ts where the pi extension is
-   constructed]` — confirm `model` / `modelRegistry` can be handed to the
-   provider as a callback instead of building a new LLM client.
-3. Implement the scoped consolidator against the injected capability, then
-   reuse the same channel for review and flush.
+Why this needed a contract change: these three need an LLM call, but their
+existing paths both fail inside a host — `pi.exec()` subprocess is forbidden by
+`extension-admission.ts`, and `DirectReviewContext` (model/modelRegistry) is
+never passed to the scoped entry. The host contract now exposes an optional
+`complete` callback; a provider without it simply skips background work.
 
 ## P1 — contract
 
@@ -88,13 +73,33 @@ Therefore this is contract extension, not wiring.
 
 ## P2 — engineering
 
-- Eval set: existing ~35 cases are structural (tool registration, routing,
-  erasure). No ≥20 memory-quality cases (recall, prompt injection, out-of-scope
-  target, oversized input).
 - Observability: no trace_id, no success-rate / P95 / cost / tool-failure
   metrics for open/erase/tool calls.
 - Hardening: only explicit provider-side limit is the 1200-char profile cap;
   timeouts / retries / rate limits all delegated to the host.
+- ~~Eval set~~: **done** (`f8f67a2`) — 24 cases, 90% overall / 100% adversarial
+  pass line, runs in CI via `*.test.ts`.
+
+## P3 — low priority: CI auto-publish (deferred 2026-11-19)
+
+**Decision: deprioritized.** Releases are cut by hand with
+`node scripts/publish-scoped.mjs` (uses the machine's already-authenticated npm;
+never reads or logs the token). CI OIDC publishing is blocked and not worth
+the setup cost right now.
+
+To re-enable, in order:
+1. Configure a **security key** on the npm account (njuptlzf). npm deprecated
+   TOTP (`TotpDeprecated:true`); only a physical/passkey factor is accepted.
+   npm requires 2FA at account level before it will let us edit package
+   settings ("Please configure 2FA to edit this package").
+2. On npmjs.com → `@njuptlzf/pi-hermes-memory` → Settings → Trusted publishing,
+   add a GitHub Actions publisher: user `njuptlzf`, repo `pi-hermes-memory`,
+   workflow `publish.yml`, environment `publish`, and **check "Allow npm
+   publish"** (new configs default to stage-only). The `repository.url` drift
+   that caused the earlier E404 is already fixed in `package.json`.
+3. Dispatch `publish.yml` with `ref: v<version>`, `dist-tag: next` and verify
+   the OIDC publish lands (all earlier "successful" runs had skipped publish
+   because the version was already on npm).
 
 ## Known test flake
 
@@ -108,7 +113,10 @@ release dispatch may need a re-run.
 - `release.yml` **always checks out `main`**, whose `package.json` is
   `0.11.0` (upstream, no scoped code). Running it would publish the wrong
   package. Do not use it for the fork line.
-- Correct path: bump `package.json` on `spike/f0-scoped-entry`, add the
-  CHANGELOG section, tag `v<version>`, then dispatch `publish.yml` with
-  `ref: <tag>` and a non-`latest` dist-tag (prereleases are rejected on
-  `latest`).
+- **Manual path (current)**: bump version + `PROVIDER_VERSION` together, add the
+  CHANGELOG section, commit/tag, then run `node scripts/publish-scoped.mjs`.
+  It uses the machine's `~/.npmrc` token for the official registry (reads only
+  its presence, never the value), guards version drift / dirty tree / duplicate
+  version / credentials, and polls registry propagation. `--dry-run` for preflight.
+- Correct CI path (blocked, see P3): dispatch `publish.yml` with `ref: v<version>`
+  and a non-`latest` dist-tag (prereleases are rejected on `latest`).
