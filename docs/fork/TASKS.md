@@ -38,10 +38,14 @@ Revisit only if an eval set shows FTS5 recall is insufficient.
 
 | Item | Status | Depends on |
 | --- | --- | --- |
-| Host LLM-injection contract | done in agent-chat (`feat/memory-llm-cap` `9ffca33`) | — |
-| Auto-consolidation in scoped entry | done (`51aa48b`), not yet published | host `complete` callback |
-| Background review in scoped entry | not mounted | same `complete` callback |
-| Session flush in scoped entry | not mounted | same `complete` callback |
+| Host LLM-injection contract | done in agent-chat (`feat/memory-llm-cap` `9ffca33`, pushed) | — |
+| Auto-consolidation in scoped entry | done (`51aa48b`) | host `complete` callback |
+| Background review in scoped entry | done (`1cb50de`) | same `complete` callback |
+| Session flush in scoped entry | done (`1cb50de`) | same `complete` callback |
+| Memory-quality eval set (24 cases) | done (`f8f67a2`) | — |
+
+All four P0 capabilities are now wired. `runMemoryOps` is the shared runner;
+review/flush add no divergence to upstream handlers. Eval baseline 100%.
 
 The injection contract (`MemoryCompletion`: system+user → text, host owns
 timeout/budget) landed in agent-chat's protocol + `session.ts` via
