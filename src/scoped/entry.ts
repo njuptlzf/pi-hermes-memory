@@ -42,6 +42,7 @@ import {
 } from "../store/sqlite-memory-store.js";
 import { registerMemorySearchTool } from "../tools/memory-search-tool.js";
 import { registerMemoryTool } from "../tools/memory-tool.js";
+import { attachRetrieval, type RetrievalBudget } from "./retrieval.js";
 import type { MemoryConfig } from "../types.js";
 import { createLayeredStore } from "./layered-store.js";
 import { buildScopedMemoryPolicy } from "./policy.js";
@@ -52,6 +53,14 @@ export interface ScopedHermesOptions extends ScopedRootInput {
   readonly config?: Partial<MemoryConfig>;
   /** Inject the memory policy prompt on `before_agent_start`. Default: true. */
   readonly injectPrompt?: boolean;
+  /**
+   * Per-turn automatic retrieval (v0.7 slice): on relevant user turns, query
+   * this scope's FTS5 mirror and inject a bounded `<retrieved-memory>` block.
+   * Default: true. Disable for hosts that own per-turn context entirely.
+   */
+  readonly autoRetrieve?: boolean;
+  /** Token/query budgets for automatic retrieval. Requests may only tighten. */
+  readonly retrievalBudget?: RetrievalBudget;
   /** Max characters of shared profile injected into the prompt. Default: 1200. */
   readonly profilePromptChars?: number;
   /**
@@ -214,6 +223,7 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
       // A flag may only be true when the matching tool is actually mounted in
       // mount() below — a prompt that promises an absent tool wastes model turns.
       hasSearch: true,
+      hasAutoRetrieval: options.autoRetrieve !== false,
       hasSessionSearch: false,
       hasSkills: false,
       hasProjectStore: false,
@@ -272,6 +282,18 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
       // it the search tool is mounted but would never see new memories.
       registerMemoryTool(pi, store, () => null, dbManager);
       registerMemorySearchTool(pi, dbManager, { usageTrackingEnabled: config.usageHitTrackingEnabled });
+
+      // Per-turn automatic retrieval is opt-out, not opt-in: it is the host-side
+      // value of the v0.7 slice. It follows injectPrompt (a host that owns the
+      // prompt entirely owns per-turn context too) and mounts after `ready` so
+      // a first-turn query sees the seeded FTS mirror.
+      if (options.autoRetrieve !== false) {
+        attachRetrieval(pi, dbManager, {
+          injectPrompt: options.injectPrompt,
+          ready,
+          ...(options.retrievalBudget ?? {}),
+        });
+      }
 
       // Auto-consolidation is opt-in by capability: only mount it when the host
       // injected a completion callback. The layered store routes this to the
