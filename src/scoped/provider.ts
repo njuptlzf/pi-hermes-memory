@@ -19,7 +19,7 @@ import { openScopedHermesMemory, type ScopedHermesHandle } from "./entry.js";
 import type { MemoryCompletion } from "./completion-types.js";
 
 /** Must equal package.json `version`; a test asserts it, so a release cannot drift. */
-export const PROVIDER_VERSION = "0.11.0-scoped.5";
+export const PROVIDER_VERSION = "0.11.0-scoped.6";
 
 export const PROVIDER_ID = "hermes-scoped";
 
