@@ -20,8 +20,9 @@ Status verified 2026-11-19 on `main` (fork line graduated from `spike/f0-scoped-
 | `0.11.0-scoped.3` release + repository.url fix | `232e71d` | published via `scripts/publish-scoped.mjs` |
 | Manual publish script + CI publish deferred to P3 | `bca9830`, `9fca460` | `scripts/publish-scoped.mjs` |
 | Fork line graduated to `main` + `0.11.0-scoped.4` release | — | published under `next` |
+| `capabilities.sharedProfile: true` declaration (C6) + `0.11.0-scoped.5` release | `14374c1` | consumed by agent-chat capability contract |
 
-Official npm state: `latest = 0.11.0-scoped.1` (untouched), `next = 0.11.0-scoped.4`.
+Official npm state: `latest = 0.11.0-scoped.1` (untouched), `next = 0.11.0-scoped.5`.
 The local `npmmirror.com` mirror lags — do not use it to judge publish state;
 pin `--registry=https://registry.npmjs.org --prefer-online` when verifying.
 
