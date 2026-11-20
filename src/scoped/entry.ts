@@ -223,7 +223,10 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
       // A flag may only be true when the matching tool is actually mounted in
       // mount() below — a prompt that promises an absent tool wastes model turns.
       hasSearch: true,
-      hasAutoRetrieval: options.autoRetrieve !== false,
+      // A flag may only be true when the handler is actually mounted. Retrieval
+      // is skipped when the host owns the whole prompt (injectPrompt:false) —
+      // claiming it then would promise a block that is never injected.
+      hasAutoRetrieval: options.autoRetrieve !== false && options.injectPrompt !== false,
       hasSessionSearch: false,
       hasSkills: false,
       hasProjectStore: false,
