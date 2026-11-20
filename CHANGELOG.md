@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0-scoped.6] - 2026-11-20
+
+Fork-only prerelease. Published as `@njuptlzf/pi-hermes-memory` under `next`.
+
+### Added
+- **Per-turn automatic retrieval (v0.7 slice)**: on relevant user turns, the scoped adapter queries its own per-scope FTS5 mirror and injects a bounded `<retrieved-memory security="untrusted-context">` block via `before_agent_start`. A pure heuristic Router decides retrieve/skip (prior context, debugging, preferences); generic questions are left alone. Every candidate passes `scanContent()` at read time; 1200-token default / 1500 hard cap. New `hasAutoRetrieval` capability flag is claimed in the policy prompt **only** when the handler is actually mounted. Opt out with `autoRetrieve: false`; tune with `retrievalBudget`.
+- 11 scoped contract tests (router hit/skip, query builder, block format/budget, read-time scan, opt-out/flag claim); scoped suite 55/55.
+
+### Fixed
+- **False capability claim**: `promptSection()` advertised auto-retrieval whenever `autoRetrieve !== false`, but `attachRetrieval()` skips mounting when the host owns the prompt (`injectPrompt: false`). The flag now requires both conditions — a host that owns prompt assembly is no longer told memories are retrieved automatically when no handler exists.
+
+### Fork CI
+- Registered all 25 real fork deltas in `docs/fork/divergences.json` (the fork had direct-pushed to main so CI gates never ran on a PR) and synced `package-lock.json`'s package name with `package.json`. All five CI checks green.
+
 ## [0.11.0-scoped.5] - 2026-11-20
 
 Fork-only prerelease. Published as `@njuptlzf/pi-hermes-memory` under `next`.
