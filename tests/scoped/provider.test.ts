@@ -38,6 +38,37 @@ describe("scoped hermes provider descriptor", () => {
     assert.equal(pkg.version, PROVIDER_VERSION);
   });
 
+  it("declares cross-scope profile support matching its real sharedRoot behaviour (C6)", async () => {
+    // The declaration is a fact the host reads to warn a dependent product.
+    // It must agree with what open() actually does with sharedRoot — otherwise
+    // a provider would advertise a capability it silently drops.
+    assert.equal(provider.capabilities?.sharedProfile, true);
+
+    const shared = tempRoot("shared");
+    const scope = tempRoot("scope");
+    const session = await provider.open({ storageRoot: scope, sharedRoot: shared });
+    try {
+      const tools: string[] = [];
+      session.factory({
+        registerTool: (tool: { name?: string }) => {
+          tools.push(String(tool.name ?? ""));
+          return true;
+        },
+        on: () => {},
+      });
+      const memoryAdd = tools.find((name) => name === "memory_add");
+      assert.ok(memoryAdd, "a provider claiming sharedProfile must expose the write tool");
+
+      await session.erase();
+      assert.equal(fs.existsSync(scope), false);
+      assert.equal(fs.existsSync(shared), true, "scope erasure must not touch the user profile");
+      await session.erase({ includeShared: true });
+      assert.equal(fs.existsSync(shared), false, "explicit account deletion removes the profile");
+    } finally {
+      await session.dispose();
+    }
+  });
+
   it("hands prompt assembly to the host and still produces the section", async () => {
     const root = tempRoot("open");
     const session = await provider.open({ storageRoot: root });

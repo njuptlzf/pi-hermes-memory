@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`hermes-scoped` now declares `capabilities.sharedProfile: true`** (C6). The host-neutral provider descriptor advertises the cross-scope user-profile capability it already implements (`target:"user"` → `<sharedRoot>/profile/USER.md`, split erasure), so a host can warn when a product depending on that capability selects a provider that lacks it. Structured shape only — no host SDK import.
+
 ### Fixed
 - **`publish-scoped.mjs` no longer reports a successful publish as a failure** when npm's dist-tag metadata lags behind the upload: the propagation window is now 5 minutes (was 3), and a final `npm view --prefer-online` recheck confirms the tag before giving up.
 

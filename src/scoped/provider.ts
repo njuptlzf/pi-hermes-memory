@@ -50,15 +50,30 @@ interface ProviderSession {
   dispose(): Promise<void>;
 }
 
+/**
+ * 能力声明（host-neutral 形状，结构化匹配宿主协议，不 import 宿主 SDK）。
+ *
+ * `sharedProfile: true` = 该实现真的把 `target:"user"` 写进 `<sharedRoot>/profile/USER.md`，
+ * 且 `erase()` 默认只删 scope、显式 `erase({includeShared:true})` 才删用户画像
+ * （tests/scoped/shared-layer.test.ts + multi-tenant.test.ts 钉住）。宿主据此在
+ * "产品声明依赖跨会话画像但选了不支持的 provider"时告警，而不是静默丢失能力。
+ */
+export interface ScopedHermesProviderCapabilities {
+  readonly sharedProfile?: boolean;
+}
+
 export interface ScopedHermesProvider {
   readonly id: string;
   readonly version: string;
+  /** 能力声明；宿主可读取它做能力不匹配告警。缺省视为不支持。 */
+  readonly capabilities?: ScopedHermesProviderCapabilities;
   open(ctx: ProviderContext): Promise<ProviderSession>;
 }
 
 const provider: ScopedHermesProvider = {
   id: PROVIDER_ID,
   version: PROVIDER_VERSION,
+  capabilities: { sharedProfile: true },
   async open(ctx) {
     if (typeof ctx?.storageRoot !== "string" || ctx.storageRoot.trim() === "") {
       throw new Error("hermes-scoped: open() requires an absolute storageRoot");
