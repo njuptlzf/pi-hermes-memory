@@ -1,4 +1,14 @@
-# v0.5 Tasks: Failure Memory + Categories + Provenance
+# v0.6 Tasks: Failure Memory + Categories + Provenance
+
+> ## ✅ STATUS (verified 2026-11-20): SHIPPED — checkboxes below are stale
+>
+> Failure memory shipped in `v0.6.0` (tag 2026-05-03, `feat(v0.6.0): failure memory with categories`)
+> with follow-ups through `v0.6.6`. The `failure`/`correction`/`insight`/`tool-quirk` categories,
+> `addFailure()`/`getFailureEntries()`, category-filtered `memory_search`, and failure injection
+> are all present on `main`. These boxes were never ticked; **`[ ]` here does not mean "not done"**.
+> Use `CHANGELOG.md` / `docs/0.6/CHANGELOG.md` and `git tag` for authoritative status.
+>
+> (This file previously carried a wrong `v0.5` title; corrected to match the folder and tag.)
 
 ## Status Legend
 - `[ ]` Not started

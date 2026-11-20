@@ -4,7 +4,10 @@ Fork-owned file. Upstream does not know this path, so a merge never touches it.
 Companion to `docs/fork/UPSTREAM-MAPPING.md` (what the fork is allowed to change)
 and `docs/fork/F0-BASELINE.md` (the measured baseline).
 
-Status verified 2026-11-19 on `main` (fork line graduated from `spike/f0-scoped-entry`).
+Status verified **2026-11-20** on `main` (fork line graduated from `spike/f0-scoped-entry`).
+Current fork tag: `v0.11.0-scoped.5`. Two items below (P0 host contract, P1 capability flag)
+were updated since the first verification — see the inline notes and the "Resolved since
+2026-11-19" section.
 
 ## Done
 
@@ -21,8 +24,10 @@ Status verified 2026-11-19 on `main` (fork line graduated from `spike/f0-scoped-
 | Manual publish script + CI publish deferred to P3 | `bca9830`, `9fca460` | `scripts/publish-scoped.mjs` |
 | Fork line graduated to `main` + `0.11.0-scoped.4` release | — | published under `next` |
 | `capabilities.sharedProfile: true` declaration (C6) + `0.11.0-scoped.5` release | `14374c1` | consumed by agent-chat capability contract |
+| Host completion contract consumed end to end | agent-chat `v0.8.0` | agent-chat PR #6 merged/published 2026-11-20; `complete` now injected into scoped entry |
 
-Official npm state: `latest = 0.11.0-scoped.1` (untouched), `next = 0.11.0-scoped.5`.
+Official npm state (verified 2026-11-20): `latest = 0.11.0-scoped.1` (untouched), `next = 0.11.0-scoped.5`.
+agent-chat packages are at `v0.8.0` across protocol/server/web (separate repo).
 The local `npmmirror.com` mirror lags — do not use it to judge publish state;
 pin `--registry=https://registry.npmjs.org --prefer-online` when verifying.
 
@@ -39,18 +44,22 @@ Did **not**: add vector / hybrid semantic retrieval. The repo has never had
 compact context + full injection + on-demand search policy, not vector search.
 Revisit only if an eval set shows FTS5 recall is insufficient.
 
-## P0 — complete (2026-11-19)
+## P0 — complete (host side landed 2026-11-20)
 
 | Item | Status | Depends on |
 | --- | --- | --- |
-| Host LLM-injection contract | done in agent-chat (`feat/memory-llm-cap` `9ffca33`, pushed) | — |
+| Host LLM-injection contract | **done & published** — agent-chat PR #6, `v0.8.0` (`createMemoryCompletion` in protocol + `session.ts`) | — |
 | Auto-consolidation in scoped entry | done (`51aa48b`) | host `complete` callback |
 | Background review in scoped entry | done (`1cb50de`) | same `complete` callback |
 | Session flush in scoped entry | done (`1cb50de`) | same `complete` callback |
 | Memory-quality eval set (24 cases) | done (`f8f67a2`) | — |
 
-All four P0 capabilities are now wired. `runMemoryOps` is the shared runner;
+All four P0 capabilities are now wired end to end. `runMemoryOps` is the shared runner;
 review/flush add no divergence to upstream handlers. Eval baseline 100%.
+The host half was originally "pushed but unmerged" (`9ffca33`); it was rebased onto current
+main, merged via agent-chat PR #6, and published as `v0.8.0` on 2026-11-20. A regression it
+caused in agent-chat's failover suite (background completion stealing scripted model
+responses) was fixed in the same PR by disabling memory on that test's product fixture.
 
 The injection contract (`MemoryCompletion`: system+user → text, host owns
 timeout/budget) landed in agent-chat's protocol + `session.ts` via
@@ -68,11 +77,18 @@ never passed to the scoped entry. The host contract now exposes an optional
 
 ## P1 — contract
 
-- `capabilities.sharedProfile` not implemented. Decision 2026-11-18: **wait for
-  the next upstream sync**, do not ship `0.11.0-scoped.2` just for the flag.
-- No runtime warning when a product depends on cross-scope profile but selects a
-  provider that does not support it (silently loses the capability).
-- `scoped-memory` C1–C7 hardening not done (external repo, ownership TBD).
+- ~~`capabilities.sharedProfile` not implemented~~ → **DONE 2026-11-20** (`14374c1`,
+  `v0.11.0-scoped.5`): provider declares `sharedProfile: true`. The 2026-11-18 decision
+  to wait for upstream sync was overtaken; the field was added fork-side without an
+  SDK import (structured declaration only).
+- ~~No runtime warning when a product depends on cross-scope profile but selects a
+  provider that does not support it~~ → **DONE on the host 2026-11-20** (agent-chat C6,
+  `v0.6.0`): `agent.memory.requiresSharedProfile` + `sharedProfileMismatchWarning()` in
+  `createProductSession` emits an `onUINotify` warning; session still opens. Provider-side
+  declaration is the other half of that contract (item above).
+- `scoped-memory` C1–C7 hardening not done (external repo, ownership TBD) — **still open**,
+  but moot for this fork: `scoped-memory` was **retired** from agent-chat in `v0.7.0`
+  (2026-11-20) when `hermes-scoped` became the default. No product can select it anymore.
 
 ## P2 — engineering
 

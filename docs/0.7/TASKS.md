@@ -1,5 +1,13 @@
 # v0.7 Tasks: Token-Aware Graph-Based Memory Retrieval
 
+> **Naming caveat (2026-11-20)**: This "v0.7" is a **proposed follow-up effort** and is
+> **not started** — its Router / Ranker+Packer / Runtime Injection / graph items (all `[ ]`
+> below) have no implementation on `main`. Do not confuse it with the **shipped** `v0.7.x`
+> release line (2026-05), which delivered policy-only memory (`MEMORY_POLICY_PROMPT`,
+> `memoryMode`), documented in `docs/ROADMAP.md` and tagged `v0.7.0`–`v0.7.23`. The two
+> share a version number by historical accident. Verified: no `memory-router.ts` /
+> `memory-ranker.ts` in `src/`.
+
 ## Status Legend
 
 - `[ ]` Not started

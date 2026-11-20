@@ -2,17 +2,27 @@
 
 > From markdown files to a pluggable memory substrate for any Pi agent harness.
 
-## Where We Are (v0.1.0)
+## Where We Are (2026-11-20)
 
-- Persistent memory via `MEMORY.md` + `USER.md` with `§` delimiter
-- Real-time `memory` tool (add / replace / remove) for the LLM
-- Content scanning: prompt injection, role hijacking, secret exfiltration, invisible unicode
-- Background learning loop (every N turns via `pi.exec`)
-- Session flush before compaction and shutdown
-- `/memory-insights` command
-- Frozen snapshot injection into system prompt
-- 119 automated tests, 0 type errors
-- Atomic writes (temp + rename)
+> **Status note**: This roadmap was last meaningfully updated around v0.2. The sections below
+> still describe each phase's original design; **task checkboxes in older phase docs are stale**
+> (many shipped features still show `[ ]`). For what actually shipped, use `CHANGELOG.md` and the
+> version tags — not the checkboxes. Verified state as of today:
+
+- **Upstream line**: `v0.11.0` (2026-11-11) — v0.2 Skills/Curation, v0.3 Interview/Fencing/Aging,
+  v0.4 SQLite FTS5 session search, v0.6 failure memory, v0.7 policy-only memory all shipped;
+  dozens of follow-up fixes through v0.7.23 → v0.9.11 → v0.10.0 → v0.11.0.
+- **Fork line**: `v0.11.0-scoped.5` (2026-11-20), published as `@njuptlzf/pi-hermes-memory` under
+  the `next` dist-tag — a host-neutral `hermes-scoped` memory provider consumed by agent-chat.
+- **Not started**: the v0.7 "Token-Aware Graph-Based Memory Retrieval" work in
+  `docs/0.7/TASKS.md` (Router / Ranking+Packing / Runtime Injection / graph) is a newer, separate
+  v0.7 effort and has no implementation yet. Do not confuse it with the shipped v0.7.x line above.
+- **Baseline capabilities from v0.1**: `MEMORY.md` + `USER.md` with `§` delimiter, real-time
+  `memory` tool, content scanning, background review, session flush, `/memory-insights`,
+  frozen-snapshot injection, atomic writes.
+
+The gap-analysis table below is a **historical snapshot against v0.1** — most 🔴/🟡 rows are now
+✅ in v0.11; it is kept for design rationale, not as a current status report.
 
 ---
 
@@ -87,19 +97,19 @@ graph LR
         H[Tool-Call-Aware Nudge]
     end
 
-    subgraph "v0.3 — Next"
+    subgraph "v0.3 ✅ shipped"
         I[Memory Interview]
         J[Context Fencing]
         K[Memory Aging]
         L[Project Memory Polish]
     end
 
-    subgraph "v0.4"
+    subgraph "v0.4 ✅ shipped"
         M[MemoryBackend Interface]
         N[SQLite + Session Search]
     end
 
-    subgraph "v0.5"
+    subgraph "v0.5 — planned (external sync)"
         O[ExternalSync Interface]
         P[Mem0 / Honcho]
     end
@@ -178,7 +188,9 @@ Hermes runs a self-evaluation checkpoint every 15 tool calls. Our nudge is purel
 
 ---
 
-## v0.3.0 — Interview + Hardening
+## v0.3.0 ✅ — Interview + Hardening
+
+> Shipped (2026-04/05). The task checkboxes in `docs/0.3/TASKS.md` are stale — see the status note at the top of this file.
 
 **Goal**: Give new users immediate value on install (interview), harden the security boundary (context fencing), prevent memory rot (aging), and polish project-scoped memory.
 
@@ -242,7 +254,9 @@ Project-scoped memory (`~/.pi/agent/<project>/MEMORY.md`) was added in the featu
 
 ---
 
-## v0.4.0 — SQLite FTS5 Session Search + Hybrid Memory
+## v0.4.0 ✅ — SQLite FTS5 Session Search + Hybrid Memory
+
+> Shipped (2026-05). `docs/0.4/TASKS.md` is fully checked off and accurate.
 
 **Goal**: SQLite backend with FTS5 full-text search over all past conversations. Extended memory store with unlimited capacity. Increased core memory limits.
 
@@ -348,13 +362,15 @@ MemoryOrchestrator.search()
 
 ---
 
-## v0.7.0 — Token-Aware Memory Policy
+## v0.7.0 ✅ — Token-Aware Memory Policy
 
 **Goal**: Replace full memory prompt injection with a policy-only system prompt. The system prompt explains how memory should be searched and interpreted, but does not include the full memory dump by default.
 
 **Why now**: Full Markdown injection turns memory into a permanent token tax. Users with large memory files, MCP servers, repo context, and long coding sessions can spend thousands of tokens before the task starts. SQLite search already exists, so the safest first step is to teach the agent when to call `memory_search` instead of injecting all memory up front.
 
-**Full plan**: `docs/0.7/PLAN.md` · **Tasks**: `docs/0.7/TASKS.md`
+**Naming caveat**: This shipped `v0.7.x` policy-only line (2026-05, tagged `v0.7.0`–`v0.7.23`) is **different** from the unstarted graph-retrieval proposal that also lives in `docs/0.7/TASKS.md` (titled "Token-Aware Graph-Based Memory Retrieval"). The deliverables below are all checked and shipped; the graph proposal's boxes are all open and are a separate future effort.
+
+**Full plan**: `docs/0.7/PLAN.md` · **Tasks (shipped policy-only)**: the checked deliverables below · **Tasks (unstarted graph proposal)**: `docs/0.7/TASKS.md`
 
 ### Target Architecture
 

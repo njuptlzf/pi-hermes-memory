@@ -1,6 +1,16 @@
 # Tasks — v0.3.0: Interview + Hardening
 
-> **Workflow**: When you start a task, change `[ ]` to `[~]`. When done, change to `[x]` and note the commit hash.
+> ## ✅ STATUS (verified 2026-11-20): SHIPPED — checkboxes below are stale
+>
+> v0.3.0 was tagged and released 2026-04/05. All four epics (interview, context fencing,
+> memory aging, project polish) landed in `src/` and are present on `main` today:
+> `INTERVIEW_PROMPT` + `registerInterviewCommand()`, `<memory-context>` fencing in
+> `memory-store.ts`, `encodeEntry()`/`decodeEntry()` aging helpers, and
+> `/memory-switch-project`. The boxes below were never ticked when the work landed —
+> **do not treat `[ ]` here as "not done"**. For authoritative status use `CHANGELOG.md`
+> and `git tag`; the current line is `v0.11.0` / fork `v0.11.0-scoped.5`.
+>
+> **Workflow** (historical): When you start a task, change `[ ]` to `[~]`. When done, change to `[x]` and note the commit hash.
 >
 > **Implementation order**: Epic 1 → Epic 2 → Epic 3 → Epic 4 → Epic 5
 >
