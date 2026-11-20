@@ -347,6 +347,256 @@
       "risk": "new",
       "anchors": [],
       "baseBlob": null
+    },
+    {
+      "path": "CHANGELOG.md",
+      "status": "applied",
+      "surface": "fork release notes",
+      "change": "records fork-only prereleases v0.11.0-scoped.* and C6/R-027 host contracts",
+      "reason": "the fork publishes under a different package name and version line than upstream",
+      "risk": "edit",
+      "anchors": [],
+      "baseBlob": "076f08fd4ac01a72fcea860477224c549c3f6ed7"
+    },
+    {
+      "path": "docs/0.3/TASKS.md",
+      "status": "applied",
+      "surface": "phase task doc",
+      "change": "status banner: shipped tasks left with stale checkboxes",
+      "reason": "doc calibration to v0.11 reality; no upstream impact",
+      "risk": "edit",
+      "anchors": [],
+      "baseBlob": "37dfa9c337102cd5a553fa1c3bfe09d85e136f0a"
+    },
+    {
+      "path": "docs/0.6/TASKS.md",
+      "status": "applied",
+      "surface": "phase task doc",
+      "change": "status banner plus corrected v0.5 title",
+      "reason": "doc calibration to v0.11 reality",
+      "risk": "edit",
+      "anchors": [],
+      "baseBlob": "d0adabb476416f5bb71edb9705aeb5474c61f5c1"
+    },
+    {
+      "path": "docs/0.7/TASKS.md",
+      "status": "applied",
+      "surface": "phase task doc",
+      "change": "disambiguates shipped v0.7.x policy-only from unstarted graph proposal",
+      "reason": "doc calibration",
+      "risk": "edit",
+      "anchors": [],
+      "baseBlob": "ba469c3c027637d268b0d9390d57bf526450cdb2"
+    },
+    {
+      "path": "docs/ROADMAP.md",
+      "status": "applied",
+      "surface": "roadmap",
+      "change": "current-state header and shipped-phase markers updated",
+      "reason": "doc calibration to v0.11 reality",
+      "risk": "edit",
+      "anchors": [],
+      "baseBlob": "a470857c82c265ca29b7679f457f484d2df57407"
+    },
+    {
+      "path": "docs/fork/TASKS.md",
+      "status": "applied",
+      "surface": "fork backlog",
+      "change": "fork-owned task/status ledger",
+      "reason": "never conflicts on merge",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "package-lock.json",
+      "status": "applied",
+      "surface": "lockfile",
+      "change": "package name kept in sync with the scoped package name",
+      "reason": "npm install in CI rewrites the name if drifted",
+      "risk": "edit",
+      "anchors": [],
+      "baseBlob": "c7c07bc9db80fb4aba97cdce54326dfd766e3136"
+    },
+    {
+      "path": "scripts/check-production-install.mjs",
+      "status": "applied",
+      "surface": "release guard",
+      "change": "verifies a production install has no dev deps",
+      "reason": "fork release hygiene",
+      "risk": "edit",
+      "anchors": [],
+      "baseBlob": "71e9d905e7ebb3edd976d6c2e10c9a8f1b1c7d61"
+    },
+    {
+      "path": "scripts/publish-scoped.mjs",
+      "status": "applied",
+      "surface": "publish tooling",
+      "change": "manual publish under @njuptlzf/pi-hermes-memory with dist-tag next",
+      "reason": "OIDC publishing is blocked on npm security key",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "src/scoped/completion-types.ts",
+      "status": "applied",
+      "surface": "host completion types",
+      "change": "fork-local MemoryCompletion types (no host SDK import)",
+      "reason": "keeps the fork independent of agent-chat protocol types",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "src/scoped/consolidation.ts",
+      "status": "applied",
+      "surface": "auto-consolidation",
+      "change": "consolidation via host-injected complete callback",
+      "reason": "pi.exec subprocess is forbidden in a multi-tenant host",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "src/scoped/memory-ops.ts",
+      "status": "applied",
+      "surface": "shared memory ops runner",
+      "change": "bounded, atomic ops used by consolidation/review/flush",
+      "reason": "one runner keeps the three background paths consistent",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "src/scoped/retrieval.ts",
+      "status": "applied",
+      "surface": "per-turn retrieval",
+      "change": "heuristic router + FTS5 reuse + bounded untrusted-context injection",
+      "reason": "v0.7 retrieval slice for tenant hosts; no host protocol change",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "src/scoped/review-flush.ts",
+      "status": "applied",
+      "surface": "background review/flush",
+      "change": "turn-triggered review and shutdown flush via injected completion",
+      "reason": "same least-privilege completion contract",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "tests/eval/memory-quality.test.ts",
+      "status": "applied",
+      "surface": "eval set",
+      "change": "24-case memory-quality eval",
+      "reason": "fork-side quality gate",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "tests/handlers/background-review.test.ts",
+      "status": "applied",
+      "surface": "review tests",
+      "change": "Windows-deterministic review tests",
+      "reason": "test reliability on this machine",
+      "risk": "edit",
+      "anchors": [],
+      "baseBlob": "b8db3b188148b9331e2429348c6da2e89a7e62b8"
+    },
+    {
+      "path": "tests/handlers/pi-child-process.test.ts",
+      "status": "applied",
+      "surface": "child-process tests",
+      "change": "Windows child command/mode adaptations",
+      "reason": "test reliability on Windows",
+      "risk": "edit",
+      "anchors": [],
+      "baseBlob": "2547cb444e4b341cc210c895c314b1e6a2c42445"
+    },
+    {
+      "path": "tests/handlers/skills-command.test.ts",
+      "status": "applied",
+      "surface": "skills tests",
+      "change": "Windows path comparison fix",
+      "reason": "test reliability on Windows",
+      "risk": "edit",
+      "anchors": [],
+      "baseBlob": "e763dea6196757ab5ea3b93077834a9554a004ce"
+    },
+    {
+      "path": "tests/project-rebinding.test.ts",
+      "status": "applied",
+      "surface": "project rebinding test",
+      "change": "fires shutdown chain before teardown so Windows can unlink DB handles",
+      "reason": "test handle isolation",
+      "risk": "edit",
+      "anchors": [],
+      "baseBlob": "321514d4b79bb131766ead3b4ac7f400a4767dd7"
+    },
+    {
+      "path": "tests/prompt-injection.test.ts",
+      "status": "applied",
+      "surface": "injection test",
+      "change": "collects and fires shutdown handlers before removing temp dirs",
+      "reason": "test handle isolation",
+      "risk": "edit",
+      "anchors": [],
+      "baseBlob": "fb15453e5e3b0cd114d8792bf098e81243087f40"
+    },
+    {
+      "path": "tests/run-all.sh",
+      "status": "applied",
+      "surface": "test runner",
+      "change": "prefers local tsx over npx; cross-platform",
+      "reason": "npm startup flakiness under long suites",
+      "risk": "edit",
+      "anchors": [],
+      "baseBlob": "b142e0cd7a65527aa19e4529d4fbe1cb338516bf"
+    },
+    {
+      "path": "tests/scoped/consolidation.test.ts",
+      "status": "applied",
+      "surface": "scoped consolidation tests",
+      "change": "contract tests for host-completion consolidation",
+      "reason": "fork-owned coverage",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "tests/scoped/retrieval.test.ts",
+      "status": "applied",
+      "surface": "scoped retrieval tests",
+      "change": "router hit/skip, FTS5, block format, read-time scan",
+      "reason": "fork-owned coverage for the v0.7 slice",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "tests/scoped/review-flush.test.ts",
+      "status": "applied",
+      "surface": "scoped review/flush tests",
+      "change": "bounded completion contract tests",
+      "reason": "fork-owned coverage",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "tests/scoped/search.test.ts",
+      "status": "applied",
+      "surface": "scoped search tests",
+      "change": "per-scope FTS5 isolation and tool wiring",
+      "reason": "fork-owned coverage",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
     }
   ]
 }

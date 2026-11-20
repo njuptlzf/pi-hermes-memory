@@ -62,7 +62,7 @@ function tempRoot(label: string): string {
   roots.push(dir);
   return dir;
 }
-function mount(options: { storageRoot: string; autoRetrieve?: boolean }): {
+function mount(options: { storageRoot: string; autoRetrieve?: boolean; injectPrompt?: boolean }): {
   handle: ScopedHermesHandle;
   handlers: Map<string, Handler[]>;
   tools: Map<string, CapturedTool>;
@@ -173,6 +173,14 @@ describe("scoped per-turn retrieval — FTS5 query + block format", () => {
     const { handle } = mount({ storageRoot: tempRoot("on") });
     const section = await handle.promptSection();
     assert.match(section, /retrieved automatically/);
+  });
+
+  it("injectPrompt:false makes no policy claim and mounts no retrieval handler", async () => {
+    const { handle, handlers } = mount({ storageRoot: tempRoot("host-owns-prompt"), injectPrompt: false });
+    const section = await handle.promptSection();
+    assert.doesNotMatch(section, /retrieved automatically/);
+    // The static policy handler is suppressed too; no before_agent_start at all.
+    assert.equal((handlers.get("before_agent_start") ?? []).length, 0);
   });
 });
 
