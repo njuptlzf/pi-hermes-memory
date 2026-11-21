@@ -12,11 +12,12 @@
 - **Upstream line**: `v0.11.0` (2026-11-11) — v0.2 Skills/Curation, v0.3 Interview/Fencing/Aging,
   v0.4 SQLite FTS5 session search, v0.6 failure memory, v0.7 policy-only memory all shipped;
   dozens of follow-up fixes through v0.7.23 → v0.9.11 → v0.10.0 → v0.11.0.
-- **Fork line**: `v0.11.0-scoped.5` (2026-11-20), published as `@njuptlzf/pi-hermes-memory` under
+- **Fork line**: `v0.11.0-scoped.6` (2026-11-20), published as `@njuptlzf/pi-hermes-memory` under
   the `next` dist-tag — a host-neutral `hermes-scoped` memory provider consumed by agent-chat.
 - **Not started**: the v0.7 "Token-Aware Graph-Based Memory Retrieval" work in
-  `docs/0.7/TASKS.md` (Router / Ranking+Packing / Runtime Injection / graph) is a newer, separate
-  v0.7 effort and has no implementation yet. Do not confuse it with the shipped v0.7.x line above.
+  `docs/0.7/PROPOSAL.md` (Router / Ranking+Packing / Runtime Injection / graph) is a newer, separate
+  v0.7 proposal and has no implementation yet. It is not a task tracker; current fork work lives in
+  `docs/fork/TASKS.md`. Do not confuse it with the shipped v0.7.x line above.
 - **Baseline capabilities from v0.1**: `MEMORY.md` + `USER.md` with `§` delimiter, real-time
   `memory` tool, content scanning, background review, session flush, `/memory-insights`,
   frozen-snapshot injection, atomic writes.
@@ -368,9 +369,9 @@ MemoryOrchestrator.search()
 
 **Why now**: Full Markdown injection turns memory into a permanent token tax. Users with large memory files, MCP servers, repo context, and long coding sessions can spend thousands of tokens before the task starts. SQLite search already exists, so the safest first step is to teach the agent when to call `memory_search` instead of injecting all memory up front.
 
-**Naming caveat**: This shipped `v0.7.x` policy-only line (2026-05, tagged `v0.7.0`–`v0.7.23`) is **different** from the unstarted graph-retrieval proposal that also lives in `docs/0.7/TASKS.md` (titled "Token-Aware Graph-Based Memory Retrieval"). The deliverables below are all checked and shipped; the graph proposal's boxes are all open and are a separate future effort.
+**Naming caveat**: This shipped `v0.7.x` policy-only line (2026-05, tagged `v0.7.0`–`v0.7.23`) is **different** from the unstarted graph-retrieval proposal in `docs/0.7/PROPOSAL.md` (titled "Token-Aware Graph-Based Memory Retrieval"). The deliverables below are all checked and shipped; the graph proposal's boxes are design items, not current work.
 
-**Full plan**: `docs/0.7/PLAN.md` · **Tasks (shipped policy-only)**: the checked deliverables below · **Tasks (unstarted graph proposal)**: `docs/0.7/TASKS.md`
+**Full plan**: `docs/0.7/PLAN.md` · **Tasks (shipped policy-only)**: the checked deliverables below · **Proposal (unstarted graph retrieval, not a tracker)**: `docs/0.7/PROPOSAL.md`
 
 ### Target Architecture
 

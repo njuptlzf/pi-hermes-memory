@@ -394,10 +394,10 @@
       "baseBlob": "d0adabb476416f5bb71edb9705aeb5474c61f5c1"
     },
     {
-      "path": "docs/0.7/TASKS.md",
+      "path": "docs/0.7/PROPOSAL.md",
       "status": "applied",
-      "surface": "phase task doc",
-      "change": "disambiguates shipped v0.7.x policy-only from unstarted graph proposal",
+      "surface": "phase proposal doc",
+      "change": "renamed from docs/0.7/TASKS.md and given an explicit role header: proposal, not a task tracker; disambiguates shipped v0.7.x policy-only from unstarted graph proposal",
       "reason": "doc calibration",
       "risk": "edit",
       "anchors": [],
