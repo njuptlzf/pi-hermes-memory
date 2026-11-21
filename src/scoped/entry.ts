@@ -47,6 +47,13 @@ import type { MemoryConfig } from "../types.js";
 import { createLayeredStore } from "./layered-store.js";
 import { buildScopedMemoryPolicy } from "./policy.js";
 import { resolveScopedRoots, scopedLayout, type ScopedLayout, type ScopedRootInput, type ScopedRoots } from "./roots.js";
+import { guardCompletion, type CompletionLimits } from "./completion-guard.js";
+import {
+  createScopedTelemetry,
+  instrumentToolRegistration,
+  type ScopedMetricsSnapshot,
+  type ScopedTelemetry,
+} from "./observability.js";
 
 export interface ScopedHermesOptions extends ScopedRootInput {
   /** Overrides spread on top of `defaultMemoryConfig()`. Never read from disk. */
@@ -68,6 +75,13 @@ export interface ScopedHermesOptions extends ScopedRootInput {
    * is mounted; when absent, the tenant still reads/writes/searches normally.
    */
   readonly complete?: MemoryCompletion;
+  /**
+   * Pre-built telemetry from the provider boundary. When omitted the entry
+   * creates its own, so direct `openScopedHermesMemory` users get metrics too.
+   */
+  readonly telemetry?: ScopedTelemetry;
+  /** Defensive provider-side limits for the injected completion. */
+  readonly completionLimits?: CompletionLimits;
 }
 
 export interface EraseOptions {
@@ -93,6 +107,10 @@ export interface ScopedHermesHandle {
   readonly profileStore: MemoryStore | null;
   /** Resolves once the initial disk load has completed; never rejects unhandled. */
   readonly ready: Promise<void>;
+  /** Bounded observation window for this tenant. Never throws into callers. */
+  readonly telemetry: ScopedTelemetry;
+  /** Current aggregate metrics (success/P95/cost/tool failures). */
+  metrics(): ScopedMetricsSnapshot;
   /** The memory policy section, for a host that assembles the prompt itself. */
   promptSection(): Promise<string>;
   /** Attach tools and hooks to a pi instance. Safe to call once per handle. */
@@ -125,6 +143,12 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
     );
   }
   claimedRoots.add(layout.memoryDir);
+
+  const telemetry = options.telemetry ?? createScopedTelemetry();
+  const complete = guardCompletion(options.complete, {
+    ...options.completionLimits,
+    telemetry,
+  });
 
   const config: MemoryConfig = {
     ...defaultMemoryConfig(),
@@ -248,6 +272,8 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
     store,
     profileStore,
     ready,
+    telemetry,
+    metrics: () => telemetry.snapshot(),
     promptSection,
     mount(pi: ExtensionAPI) {
       if (mounted) {
@@ -283,8 +309,11 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
       // does not want. `()` keeps the tool's project argument inert. Passing the
       // dbManager is what mirrors writes into this tenant's FTS5 index; without
       // it the search tool is mounted but would never see new memories.
-      registerMemoryTool(pi, store, () => null, dbManager);
-      registerMemorySearchTool(pi, dbManager, { usageTrackingEnabled: config.usageHitTrackingEnabled });
+      // The tool proxy observes execute() outcomes at the provider boundary —
+      // upstream tool files stay untouched, so an upstream merge costs nothing.
+      const observedPi = instrumentToolRegistration(pi, telemetry);
+      registerMemoryTool(observedPi, store, () => null, dbManager);
+      registerMemorySearchTool(observedPi, dbManager, { usageTrackingEnabled: config.usageHitTrackingEnabled });
 
       // Per-turn automatic retrieval is opt-out, not opt-in: it is the host-side
       // value of the v0.7 slice. It follows injectPrompt (a host that owns the
@@ -302,8 +331,7 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
       // injected a completion callback. The layered store routes this to the
       // scope store, which owns memory/failure (the profile is capped small and
       // never consolidated, by design — see layered-store.ts).
-      if (options.complete !== undefined) {
-        const complete = options.complete;
+      if (complete !== undefined) {
         store.setConsolidator((target, signal) =>
           consolidateViaCompletion(store, { target, complete, signal }),
         );
@@ -313,20 +341,24 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
       }
     },
     async erase(eraseOptions?: EraseOptions) {
-      await ready;
-      // Close pinned connections first: Windows refuses to unlink an open file.
-      // Both the markdown-mutation lock and the SQLite handle/lock live under
-      // storageRoot, so all three must be released before the recursive rm.
-      dbManager.close();
-      AtomicLockCoordinator.shared(dbLockPath).closeHandle();
-      releaseLock(roots.storageRoot);
-      await fs.rm(roots.storageRoot, { recursive: true, force: true });
-      claimedRoots.delete(layout.memoryDir);
+      // Erasure is a provider-level operation, so its metric belongs here (not
+      // in the provider descriptor) — direct entry users get the same signal.
+      return telemetry.measure("erase", undefined, async () => {
+        await ready;
+        // Close pinned connections first: Windows refuses to unlink an open file.
+        // Both the markdown-mutation lock and the SQLite handle/lock live under
+        // storageRoot, so all three must be released before the recursive rm.
+        dbManager.close();
+        AtomicLockCoordinator.shared(dbLockPath).closeHandle();
+        releaseLock(roots.storageRoot);
+        await fs.rm(roots.storageRoot, { recursive: true, force: true });
+        claimedRoots.delete(layout.memoryDir);
 
-      if (eraseOptions?.includeShared && roots.sharedRoot !== null) {
-        releaseLock(roots.sharedRoot);
-        await fs.rm(roots.sharedRoot, { recursive: true, force: true });
-      }
+        if (eraseOptions?.includeShared && roots.sharedRoot !== null) {
+          releaseLock(roots.sharedRoot);
+          await fs.rm(roots.sharedRoot, { recursive: true, force: true });
+        }
+      });
     },
     async dispose() {
       if (disposed) return;
