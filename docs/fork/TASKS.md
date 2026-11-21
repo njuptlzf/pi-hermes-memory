@@ -4,8 +4,8 @@ Fork-owned file. Upstream does not know this path, so a merge never touches it.
 Companion to `docs/fork/UPSTREAM-MAPPING.md` (what the fork is allowed to change)
 and `docs/fork/F0-BASELINE.md` (the measured baseline).
 
-Status verified **2026-11-21** on `main` (fork line graduated from `spike/f0-scoped-entry`).
-Current fork tag: `v0.11.0-scoped.6`. P0–P2 are complete (P2 is PR #3, pending merge).
+Status verified **2026-11-21** on `main` at `0538b7f` (fork line graduated from `spike/f0-scoped-entry`).
+Current fork tag: `v0.11.0-scoped.6`. P0–P2 are complete (P2 merged in PR #3, `f4407f7`).
 Earlier updates to the host contract and capability flag are recorded inline.
 
 ## Done
