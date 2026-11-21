@@ -17,6 +17,12 @@
 
 import { openScopedHermesMemory, type ScopedHermesHandle } from "./entry.js";
 import type { MemoryCompletion } from "./completion-types.js";
+import type { CompletionLimits } from "./completion-guard.js";
+import {
+  createScopedTelemetry,
+  type ScopedMetricEvent,
+  type ScopedMetricsSnapshot,
+} from "./observability.js";
 
 /** Must equal package.json `version`; a test asserts it, so a release cannot drift. */
 export const PROVIDER_VERSION = "0.11.0-scoped.6";
@@ -39,12 +45,21 @@ interface ProviderContext {
    * path is unaffected. Structurally matches the host's MemoryCompletion.
    */
   readonly complete?: MemoryCompletion;
+  /** Host correlation id propagated to every metric event. Optional. */
+  readonly traceId?: string;
+  /** Per-event metric sink. Must never throw into the host. Optional. */
+  readonly onMetric?: (event: ScopedMetricEvent) => void;
+  /** Defensive limits for background completions. Host limits still win. */
+  readonly completionLimits?: CompletionLimits;
 }
 
 interface ProviderSession {
   readonly providerId: string;
   readonly factory: (pi: unknown) => void;
   readonly selfInjects: boolean;
+  readonly traceId: string;
+  /** Bounded metrics window; aggregates include success rate, P95 and cost. */
+  metrics(): ScopedMetricsSnapshot;
   promptSection(): Promise<string>;
   erase(options?: { readonly includeShared?: boolean }): Promise<void>;
   dispose(): Promise<void>;
@@ -75,24 +90,33 @@ const provider: ScopedHermesProvider = {
   version: PROVIDER_VERSION,
   capabilities: { sharedProfile: true },
   async open(ctx) {
-    if (typeof ctx?.storageRoot !== "string" || ctx.storageRoot.trim() === "") {
-      throw new Error("hermes-scoped: open() requires an absolute storageRoot");
-    }
-    const tenant: ScopedHermesHandle = openScopedHermesMemory({
-      storageRoot: ctx.storageRoot,
-      sharedRoot: ctx.sharedRoot ?? null,
-      complete: ctx.complete,
+    // Created before validation so a rejected open is still observable with
+    // the host's trace id (or a generated one when the host did not supply it).
+    const telemetry = createScopedTelemetry({ traceId: ctx?.traceId, onMetric: ctx?.onMetric });
+    return telemetry.measure("open", undefined, async () => {
+      if (typeof ctx?.storageRoot !== "string" || ctx.storageRoot.trim() === "") {
+        throw new Error("hermes-scoped: open() requires an absolute storageRoot");
+      }
+      const tenant: ScopedHermesHandle = openScopedHermesMemory({
+        storageRoot: ctx.storageRoot,
+        sharedRoot: ctx.sharedRoot ?? null,
+        complete: ctx.complete,
+        telemetry,
+        completionLimits: ctx.completionLimits,
+      });
+      return {
+        providerId: PROVIDER_ID,
+        selfInjects: false,
+        traceId: telemetry.traceId,
+        metrics: () => tenant.metrics(),
+        factory: (pi) => {
+          tenant.mount(pi as Parameters<ScopedHermesHandle["mount"]>[0]);
+        },
+        promptSection: () => tenant.promptSection(),
+        erase: (options) => tenant.erase(options),
+        dispose: () => tenant.dispose(),
+      };
     });
-    return {
-      providerId: PROVIDER_ID,
-      selfInjects: false,
-      factory: (pi) => {
-        tenant.mount(pi as Parameters<ScopedHermesHandle["mount"]>[0]);
-      },
-      promptSection: () => tenant.promptSection(),
-      erase: (options) => tenant.erase(options),
-      dispose: () => tenant.dispose(),
-    };
   },
 };
 

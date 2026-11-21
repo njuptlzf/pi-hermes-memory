@@ -14,10 +14,21 @@ export interface MemoryCompletionRequest {
   readonly signal?: AbortSignal;
 }
 
+/**
+ * Optional usage/cost reported by the host. All fields stay optional so a host
+ * that only returns `{ text, ok }` remains structurally compatible.
+ */
+export interface MemoryCompletionUsage {
+  readonly inputTokens?: number;
+  readonly outputTokens?: number;
+  readonly costUsd?: number;
+}
+
 export interface MemoryCompletionResult {
   readonly text: string;
   readonly ok: boolean;
   readonly error?: string;
+  readonly usage?: MemoryCompletionUsage;
 }
 
 export type MemoryCompletion = (req: MemoryCompletionRequest) => Promise<MemoryCompletionResult>;

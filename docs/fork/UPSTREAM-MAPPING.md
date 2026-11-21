@@ -24,9 +24,12 @@ of the store/retrieval engine**.
 | `docs/fork/UPSTREAM-MAPPING.md` | this map | no — fork-only path |
 | `docs/fork/divergences.json` | registry read by the gate | no — fork-only path |
 | `scripts/upstream-divergence.mjs` | `npm run upstream:check` | no — fork-only path |
+| `src/scoped/**` | tenant adapter: entry, provider, roots, policy, retrieval, hardening, observability | no — upstream has no `src/scoped/` directory |
+| `tests/scoped/**` | contract tests for the adapter above | no — upstream has no `tests/scoped/` directory |
 
-Anything added under `docs/fork/` or as a new `scripts/*.mjs` is fork-owned by
-definition: upstream does not know the path, so a merge never touches it.
+Anything added under `docs/fork/`, `src/scoped/`, `tests/scoped/`, or as a new
+`scripts/*.mjs` is fork-owned by definition: upstream does not know the path, so
+a merge never touches it.
 
 ## 2. Diverged upstream files — the entire merge surface
 

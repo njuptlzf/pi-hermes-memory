@@ -5,6 +5,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import provider, { PROVIDER_ID, PROVIDER_VERSION } from "../../src/scoped/provider.js";
+import type { ScopedMetricEvent } from "../../src/scoped/observability.js";
 
 /**
  * 外部注册用到的入口只有三个字段：id、version、open。这里锁住它们，
@@ -111,5 +112,48 @@ describe("scoped hermes provider descriptor", () => {
   it("refuses a missing root instead of defaulting to a machine directory", async () => {
     await assert.rejects(() => provider.open({ storageRoot: "" }), /requires an absolute storageRoot/);
     await assert.rejects(() => provider.open({ storageRoot: "relative/path" }), /must be an absolute path/);
+  });
+
+  it("emits traceable metrics for open, tool calls and erase (P2)", async () => {
+    const events: ScopedMetricEvent[] = [];
+    const root = tempRoot("metrics");
+    const session = await provider.open({
+      storageRoot: root,
+      traceId: "trace-metrics",
+      onMetric: (event) => events.push(event),
+    });
+
+    try {
+      assert.equal(session.traceId, "trace-metrics");
+
+      const tools: Array<{ name?: string; execute?: (...args: any[]) => Promise<any> }> = [];
+      session.factory({
+        registerTool: (definition: any) => {
+          tools.push(definition);
+          return true;
+        },
+        on: () => {},
+      });
+
+      const add = tools.find((tool) => tool.name === "memory_add");
+      assert.ok(add?.execute, "the provider must still register its write tool");
+      const written = await add!.execute("tc", {
+        target: "memory",
+        content: "metric tracked fact",
+      });
+      assert.equal(written.details.success, true);
+
+      await session.erase();
+      const snapshot = session.metrics();
+      assert.equal(snapshot.traceId, "trace-metrics");
+      assert.ok(snapshot.byOperation.open.total >= 1);
+      assert.ok(snapshot.byOperation.tool.total >= 1);
+      assert.ok(snapshot.byOperation.erase.total >= 1);
+      assert.equal(snapshot.overall.failed, 0);
+      assert.ok(events.length >= 3);
+      assert.ok(events.every((event) => event.traceId === "trace-metrics"));
+    } finally {
+      await session.dispose();
+    }
   });
 });

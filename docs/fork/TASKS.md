@@ -4,10 +4,9 @@ Fork-owned file. Upstream does not know this path, so a merge never touches it.
 Companion to `docs/fork/UPSTREAM-MAPPING.md` (what the fork is allowed to change)
 and `docs/fork/F0-BASELINE.md` (the measured baseline).
 
-Status verified **2026-11-20** on `main` (fork line graduated from `spike/f0-scoped-entry`).
-Current fork tag: `v0.11.0-scoped.5`. Two items below (P0 host contract, P1 capability flag)
-were updated since the first verification — see the inline notes and the "Resolved since
-2026-11-19" section.
+Status verified **2026-11-21** on `main` (fork line graduated from `spike/f0-scoped-entry`).
+Current fork tag: `v0.11.0-scoped.6`. P0 and P1 are complete; P2 is being closed on a PR
+branch. Earlier updates to the host contract and capability flag are recorded inline.
 
 ## Done
 
@@ -26,7 +25,7 @@ were updated since the first verification — see the inline notes and the "Reso
 | `capabilities.sharedProfile: true` declaration (C6) + `0.11.0-scoped.5` release | `14374c1` | consumed by agent-chat capability contract |
 | Host completion contract consumed end to end | agent-chat `v0.8.0` | agent-chat PR #6 merged/published 2026-11-20; `complete` now injected into scoped entry |
 
-Official npm state (verified 2026-11-20): `latest = 0.11.0-scoped.1` (untouched), `next = 0.11.0-scoped.5`.
+Official npm state (verified 2026-11-20): `latest = 0.11.0-scoped.1` (untouched), `next = 0.11.0-scoped.6`.
 agent-chat packages are at `v0.8.0` across protocol/server/web (separate repo).
 The local `npmmirror.com` mirror lags — do not use it to judge publish state;
 pin `--registry=https://registry.npmjs.org --prefer-online` when verifying.
@@ -92,10 +91,14 @@ never passed to the scoped entry. The host contract now exposes an optional
 
 ## P2 — engineering
 
-- Observability: no trace_id, no success-rate / P95 / cost / tool-failure
-  metrics for open/erase/tool calls.
-- Hardening: only explicit provider-side limit is the 1200-char profile cap;
-  timeouts / retries / rate limits all delegated to the host.
+- [~] Observability: `traceId` + `onMetric` on `provider.open()`, bounded metric
+  window with success rate / P95 / cost / tool-failure counts, exposed via
+  `session.metrics()`. Instrumentation lives in fork-owned
+  `src/scoped/observability.ts`; upstream tool files stay untouched.
+- [~] Hardening: `completionLimits` in `src/scoped/completion-guard.ts` adds a
+  defensive 15s timeout, one transient retry, and per-tenant serialisation with
+  a 250ms minimum start interval. Host limits still win; the provider no longer
+  trusts a host callback to bound itself.
 - ~~Eval set~~: **done** (`f8f67a2`) — 24 cases, 90% overall / 100% adversarial
   pass line, runs in CI via `*.test.ts`.
 
