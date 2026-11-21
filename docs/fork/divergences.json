@@ -229,6 +229,21 @@
       "baseBlob": null
     },
     {
+      "path": "AGENTS.md",
+      "status": "applied",
+      "surface": "agent guidance",
+      "change": "fork-facing standing guidance: scoped layout, commands, PR/worktree conventions, manual release, security and dated gotchas; no task status",
+      "reason": "Upstream AGENTS.md pointed at historical upstream task files; a README-for-agents must not carry a task list that rots",
+      "risk": "edit",
+      "anchors": [
+        "docs/0.2/TASKS.md",
+        "Current work",
+        "Workflow",
+        "Releases are automated"
+      ],
+      "baseBlob": "8921629095156a013543c163fc24a02d0d0bcb08"
+    },
+    {
       "path": "scripts/upstream-divergence.mjs",
       "status": "applied",
       "surface": "sync gate",

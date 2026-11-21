@@ -51,6 +51,7 @@ same-function-body conflicts do not).
 | `src/store/skill-store.ts` | 2 | root threaded in | edit | bypasses config today |
 | `src/store/recovery-maintenance.ts` | 1 | root parameter | edit | 1 reference |
 | `src/constants.ts` | 0 | `buildMemoryTargetRoutingGuidance()` (line 230) rewritten to scope-relative wording | edit | the only prompt-side change; callers in `background-review.ts`, `correction-detector.ts` pass a boolean |
+| `AGENTS.md` | 0 | fork-facing standing guidance; no task status | edit | upstream file points at historical `docs/0.2/TASKS.md` and an automated release path |
 
 ## 3. Deliberately untouched (and the reason it stays that way)
 
