@@ -31,6 +31,8 @@ This repository is the scoped fork of `pi-hermes-memory`: Hermes-style persisten
 
 Read the tracker before deciding what to work on next. Do not keep task status in this file.
 
+When asked "what's next", answer only from that tracker. Roadmap and proposal docs (for example `docs/0.7/PROPOSAL.md` and `docs/ROADMAP.md`) describe possible future work; mention them only when explicitly asked, and label them as not current work.
+
 ## Commands
 
 ```bash

@@ -1,5 +1,10 @@
-# v0.7 Tasks: Token-Aware Graph-Based Memory Retrieval
+# v0.7 proposal: Token-Aware Graph-Based Memory Retrieval
 
+> **Role: proposal, not a task tracker.** This file describes a *possible future
+> effort*. Its `[ ]` boxes are design items, **not** current work items. Current
+> fork work is tracked only in `docs/fork/TASKS.md`; do not pick an item from
+> this file as "the next todo".
+>
 > **Naming caveat (2026-11-20)**: This "v0.7" is a **proposed follow-up effort** and is
 > **not started** — its Router / Ranker+Packer / Runtime Injection / graph items (all `[ ]`
 > below) have no implementation on `main`. Do not confuse it with the **shipped** `v0.7.x`

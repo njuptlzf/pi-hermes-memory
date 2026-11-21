@@ -14,7 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - `MemoryCompletionResult` accepts optional `usage` (`inputTokens`, `outputTokens`, `costUsd`). The provider only aggregates what the host reports — it never guesses a price table.
-- `AGENTS.md` is now standing project guidance only: commands, layout, conventions, security, manual fork release and dated gotchas. Task status moved out to `docs/fork/TASKS.md`; upstream release instructions and historical v0.1/v0.2 pointers were removed.
+- `AGENTS.md` is now standing project guidance only: commands, layout, conventions, security, manual fork release and dated gotchas. Task status moved out to `docs/fork/TASKS.md`; upstream release instructions and historical v0.1/v0.2 pointers were removed. It now also states that "what's next" is answered only from the tracker, never from roadmap/proposal docs.
+- `docs/0.7/TASKS.md` is renamed to `docs/0.7/PROPOSAL.md` and given an explicit role header: a proposal with design items, not a task tracker. `docs/ROADMAP.md` references are updated, and its fork-line version note is corrected to `v0.11.0-scoped.6`.
 
 ### Fixed
 - **Full test suite on Windows**: `session-indexer.test.ts`'s `excludeDirs` case created a literal `nope-*` directory name, which Windows rejects (`*` is not allowed in paths). It now creates `nope-artifacts` while still matching the `nope-*` glob, preserving the test's intent on every platform.
