@@ -124,6 +124,51 @@ To re-enable, in order:
    the OIDC publish lands (all earlier "successful" runs had skipped publish
    because the version was already on npm).
 
+## Backlog — upstream surface not wired into scoped (candidates, unassessed)
+
+Recorded 2026-11-21 by comparing the full Pi entry (`src/index.ts`) with the
+scoped composition (`src/scoped/entry.ts` and `src/scoped/*`). **This is a
+candidate list, not current work, not a priority order, and not a promise to
+implement.** For each row, suitability for the in-process/rpc host, tenant
+isolation and fork-boundary cost must be analysed when the item is picked up.
+Several rows are known to be deliberate exclusions today; that decision is not
+being re-made here.
+
+| # | Candidate | Upstream surface | Scoped today / known constraint | Analyse before doing |
+| --- | --- | --- | --- | --- |
+| 1 | Procedural skills (`skill_manage`) | `SkillStore`, `registerSkillTool`, CRUD, structured `SKILL.md` rendering | not mounted; `hasSkills:false`; `skillsEnabled` has no effect | per-tenant skill roots; whether procedures belong in a scope |
+| 2 | Skill discovery / migration | `resources_discover`, legacy skill migration, `ensureDiscoveredRoots` | no discovery handler; no skill roots under the tenant layout | host already owns discovery; avoid duplicates with Pi's own skills |
+| 3 | `session_search` tool | legacy SQLite FTS5 variant and `anchors` variant | not mounted; `hasSessionSearch:false` | host owns conversation history; per-scope session source would have to be defined |
+| 4 | Session index pipeline | backfill, live index, shutdown indexing, prune/retention, ephemeral cleanup, recovery maintenance, `session_files` metadata | none; tenant SQLite only holds the memory/FTS5 mirror | which root holds session data without leaking across tenants |
+| 5 | Correction detection | `setupCorrectionDetector` two-pass pattern filter, immediate save | not wired; corrections only reach memory via periodic review | can reuse `runMemoryOps` + injected `complete`; needs trigger and routing |
+| 6 | Tool-call-aware review nudge | tool-call threshold, `reviewEnabled`/`nudgeInterval`/`nudgeToolCalls`, UI notification | scoped review counts only user turns (default 6), no config knobs, no notify | host event shape; whether UI notification belongs to the provider |
+| 7 | Project memory layer | cwd binding, `projects-memory/<project>`, `target:"project"` | deliberately absent: tenant root is the scope, `projectStoreRef()` is null | project dimension would reintroduce a shared axis the host removed |
+| 8 | Standing instructions store + prompt block | `STANDING.md`, `<standing-instructions>` injected in every mode | no store, no prompt block | user-authored directives in a tenant: who owns and pins them |
+| 9 | `/memory-pin` | command to pin/list/remove standing instructions | not registered | `registerCommand` is a no-op in rpc mode; need a tool/port instead |
+| 10 | `/memory-insights` | command showing stored memory inventory | not registered | host-side equivalent, if any |
+| 11 | `/memory-skills` | command listing procedural skills | not registered | depends on rows 1–2 |
+| 12 | `/memory-consolidate` | manual consolidation trigger | not registered; automatic consolidation exists only with `complete` | host-triggered alternative to a TUI command |
+| 13 | `/memory-interview` | onboarding interview pre-filling the profile | not registered | onboarding ownership in the host |
+| 14 | `/memory-switch-project` | list/switch project memories | not registered | moot while row 7 is absent |
+| 15 | `/learn-memory-tool` | command teaching the memory tools | not registered | host can put this in its own docs/prompt |
+| 16 | `/memory-sync-markdown` | repair command syncing Markdown into SQLite | not registered; scoped seeds the mirror on every open instead | whether a manual repair path is still needed |
+| 17 | `/memory-preview-context` | command previewing the exact injected context | not registered | host-side debug surface, if any |
+| 18 | `/memory-index-sessions` | manual session indexing command | not registered | depends on row 4 |
+| 19 | Prompt modes | `memoryMode:"legacy-inject"`, policy styles `full/compact/custom/none`, full `<memory-context>` block | scoped always uses `buildScopedMemoryPolicy()` + shared profile + retrieval block | host assembles its own prompt; verify which block is legal |
+| 20 | Startup migration / repair | extension-root migration, legacy project-dir migration, skill migration, Markdown→SQLite sync | no migration commands; only per-open mirror reconciliation | tenant roots are host-computed; upstream legacy paths may not exist |
+| 21 | Provider option passthrough | `injectPrompt`, `autoRetrieve`, `retrievalBudget`, `profilePromptChars`, review turn/message budgets | supported by `openScopedHermesMemory()` but absent from `ProviderContext`/`provider.open()` | host-neutral way to expose tuning without leaking upstream config |
+| 22 | Review/flush config surface | `reviewEnabled`, `nudgeInterval`, `reviewRecentMessages`, UI notifications | scoped review/flush use fixed defaults behind `complete` | same as row 6, plus whether hosts need to tune it |
+
+Not in this backlog because already wired through the shared engine or scoped
+adapter: persistent memory/failure writes, `memory_search` with a per-scope
+FTS5 mirror, per-turn automatic retrieval, auto-consolidation / background
+review / session flush when `complete` is injected, secret scanning, memory
+aging, extended store, metrics, `erase()` and `dispose()`.
+
+Housekeeping found during the comparison: the header comment in
+`src/scoped/entry.ts` still says background review and session flush are
+excluded; the code now wires both through `src/scoped/review-flush.ts`.
+
 ## Test reliability (Windows)
 
 Fixed: `background-review.test.ts`'s `reviewInProgress` subtest used a fixed
