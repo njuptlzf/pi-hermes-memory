@@ -409,6 +409,16 @@
       "baseBlob": null
     },
     {
+      "path": "docs/fork/P2-OBSERVABILITY-DESIGN.md",
+      "status": "applied",
+      "surface": "fork documentation",
+      "change": "as-implemented design record for P2 trace ids and metrics",
+      "reason": "fork-owned path; never conflicts on merge",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
       "path": "package-lock.json",
       "status": "applied",
       "surface": "lockfile",
