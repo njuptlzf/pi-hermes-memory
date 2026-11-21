@@ -4,9 +4,11 @@ Fork-owned file. Upstream does not know this path, so a merge never touches it.
 Companion to `docs/fork/UPSTREAM-MAPPING.md` (what the fork is allowed to change)
 and `docs/fork/F0-BASELINE.md` (the measured baseline).
 
-Status verified **2026-11-21** on `main` at `0538b7f` (fork line graduated from `spike/f0-scoped-entry`).
+Status verified **2026-11-22** on `main` at `fcdbfa7` (fork line graduated from `spike/f0-scoped-entry`).
 Current fork tag: `v0.11.0-scoped.6`. P0–P2 are complete (P2 merged in PR #3, `f4407f7`).
-Earlier updates to the host contract and capability flag are recorded inline.
+The 22 candidate rows were assessed in order on 2026-11-22; P3 is now explicitly
+lower priority than all of them. Earlier updates to the host contract and
+capability flag are recorded inline.
 
 ## Done
 
@@ -103,36 +105,13 @@ never passed to the scoped entry. The host contract now exposes an optional
 - ~~Eval set~~: **done** (`f8f67a2`) — 24 cases, 90% overall / 100% adversarial
   pass line, runs in CI via `*.test.ts`.
 
-## P3 — low priority: CI auto-publish (deferred 2026-11-19)
-
-**Decision: deprioritized.** Releases are cut by hand with
-`node scripts/publish-scoped.mjs` (uses the machine's already-authenticated npm;
-never reads or logs the token). CI OIDC publishing is blocked and not worth
-the setup cost right now.
-
-To re-enable, in order:
-1. Configure a **security key** on the npm account (njuptlzf). npm deprecated
-   TOTP (`TotpDeprecated:true`); only a physical/passkey factor is accepted.
-   npm requires 2FA at account level before it will let us edit package
-   settings ("Please configure 2FA to edit this package").
-2. On npmjs.com → `@njuptlzf/pi-hermes-memory` → Settings → Trusted publishing,
-   add a GitHub Actions publisher: user `njuptlzf`, repo `pi-hermes-memory`,
-   workflow `publish.yml`, environment `publish`, and **check "Allow npm
-   publish"** (new configs default to stage-only). The `repository.url` drift
-   that caused the earlier E404 is already fixed in `package.json`.
-3. Dispatch `publish.yml` with `ref: v<version>`, `dist-tag: next` and verify
-   the OIDC publish lands (all earlier "successful" runs had skipped publish
-   because the version was already on npm).
-
-## Backlog — upstream surface not wired into scoped (candidates, unassessed)
+## Backlog — upstream surface not wired into scoped (candidates, assessed)
 
 Recorded 2026-11-21 by comparing the full Pi entry (`src/index.ts`) with the
-scoped composition (`src/scoped/entry.ts` and `src/scoped/*`). **This is a
-candidate list, not current work, not a priority order, and not a promise to
-implement.** For each row, suitability for the in-process/rpc host, tenant
-isolation and fork-boundary cost must be analysed when the item is picked up.
-Several rows are known to be deliberate exclusions today; that decision is not
-being re-made here.
+scoped composition (`src/scoped/entry.ts` and `src/scoped/*`). Rows are still
+**candidates, not current work and not a promise to implement**; the assessment
+below records whether each one is worth doing, not a schedule. P3 sits after
+this whole list.
 
 | # | Candidate | Upstream surface | Scoped today / known constraint | Analyse before doing |
 | --- | --- | --- | --- | --- |
@@ -168,6 +147,63 @@ aging, extended store, metrics, `erase()` and `dispose()`.
 Housekeeping found during the comparison: the header comment in
 `src/scoped/entry.ts` still says background review and session flush are
 excluded; the code now wires both through `src/scoped/review-flush.ts`.
+
+### Assessment (2026-11-22)
+
+Verdicts follow the row order above. "采纳（待排期）" means the fork should do it
+but it is not scheduled; "延后" means an external prerequisite is missing;
+"不做" means the current host/fork design deliberately excludes it.
+
+| # | Verdict | Basis / next step |
+| --- | --- | --- |
+| 1 | 延后 | `SkillStore` accepts an injected root, but the provider port has no skill-path exit and the host already owns discovery. Confirm a tenant-skill requirement before designing roots and registration. |
+| 2 | 延后 | Depends on #1; without a tenant skill root there is nothing to migrate or discover. |
+| 3 | 延后 | Needs a per-scope session source from the host. Reading the host-global sessions directory would leak across tenants. |
+| 4 | 延后 | Depends on #3; the whole index chain must use the same per-scope session source. |
+| 5 | 采纳（待排期） | Default patterns + injected `complete` + `runMemoryOps` are enough; needs de-duplication against review/flush and the same failure isolation. |
+| 6 | 采纳（待排期） | Count tool calls in `turn_end` with existing defaults. Skip UI notification; config knobs come with #21/#22. |
+| 7 | 不做 | The tenant root is the scope; a project axis would reintroduce the shared dimension the host deliberately removed. |
+| 8 | 采纳（待排期） | Point `StandingInstructions` at a file under `storageRoot` and render it from `promptSection()`. Prompt only — no agent-authored writes. |
+| 9 | 不做 | `registerCommand` is a no-op in rpc mode; if #8 lands, authoring belongs to a host/user-side surface, not an agent tool. |
+| 10 | 不做 | The host can read memory files or use existing search; a TUI command has no rpc value. |
+| 11 | 延后 | Depends on #1–#2; no skill store means no inventory to list. |
+| 12 | 延后 | Automatic consolidation already covers capacity. A manual trigger needs a host call surface, not a TUI command. |
+| 13 | 不做 | Onboarding belongs to the host/product; the command is inert in rpc. |
+| 14 | 不做 | Depends on the already-excluded #7. |
+| 15 | 不做 | Usage guidance belongs in host docs/prompt; no command needed. |
+| 16 | 不做 | Scoped already reconciles the FTS5 mirror on every open, so the repair command has no gap to fill. |
+| 17 | 不做 | The host can inspect the injected text by calling `promptSection()` directly. |
+| 18 | 延后 | Depends on #3–#4; without a per-scope session source there is nothing to index. |
+| 19 | 不做 | The host assembles its own prompt; `legacy-inject` conflicts with `selfInjects:false` and raises token/isolation risk. |
+| 20 | 不做 | Tenant roots are host-computed, so upstream legacy migration sources do not exist; mirror reconciliation is the repair path. |
+| 21 | 采纳（待排期） | Fork-owned parameter passthrough with low merge cost; unlocks tuning for #6/#22 and profile/retrieval budgets. |
+| 22 | 采纳（待排期） | Implement with #6/#21: pass review/flush knobs, keep UI notification out. |
+
+Summary: **5 采纳**（#5, #6, #8, #21, #22）, **7 延后**（#1, #2, #3, #4, #11, #12, #18）,
+**10 不做**（#7, #9, #10, #13, #14, #15, #16, #17, #19, #20）. If work starts, take
+adopted rows in numeric order; #21/#22 travel with #6.
+
+## P3 — CI auto-publish (deferred; lowest priority, after the 22 candidates)
+
+**Decision: deprioritized.** Releases are cut by hand with
+`node scripts/publish-scoped.mjs` (uses the machine's already-authenticated npm;
+never reads or logs the token). CI OIDC publishing is blocked and not worth
+the setup cost right now. This section is intentionally placed after the
+candidate backlog and its assessment: P3 is lower priority than all 22 rows.
+
+To re-enable, in order:
+1. Configure a **security key** on the npm account (njuptlzf). npm deprecated
+   TOTP (`TotpDeprecated:true`); only a physical/passkey factor is accepted.
+   npm requires 2FA at account level before it will let us edit package
+   settings ("Please configure 2FA to edit this package").
+2. On npmjs.com → `@njuptlzf/pi-hermes-memory` → Settings → Trusted publishing,
+   add a GitHub Actions publisher: user `njuptlzf`, repo `pi-hermes-memory`,
+   workflow `publish.yml`, environment `publish`, and **check "Allow npm
+   publish"** (new configs default to stage-only). The `repository.url` drift
+   that caused the earlier E404 is already fixed in `package.json`.
+3. Dispatch `publish.yml` with `ref: v<version>`, `dist-tag: next` and verify
+   the OIDC publish lands (all earlier "successful" runs had skipped publish
+   because the version was already on npm).
 
 ## Test reliability (Windows)
 
