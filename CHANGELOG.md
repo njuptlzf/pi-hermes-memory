@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **P2 observability for the scoped provider**: hosts may pass `traceId` and `onMetric` to `provider.open()`; every `open`, tool `execute` and `erase` now emits a bounded, structured event. `session.metrics()` / `handle.metrics()` aggregate success rate, P95, tool-failure counts and host-reported token/cost usage. The metric sink is best-effort — a throwing host callback can never break a memory operation.
 - **P2 provider-side hardening for background completions**: `completionLimits` adds a defensive 15s per-attempt timeout, one bounded retry for transient failures, and per-tenant serialisation with a 250ms minimum start interval. A callback that ignores its `AbortSignal` can no longer hang the scoped adapter. Host-owned timeouts/budgets remain the source of truth; these are defensive defaults.
+- **As-implemented design record** `docs/fork/P2-OBSERVABILITY-DESIGN.md`: public surface, event/snapshot data model, trace-id lifecycle, instrumentation points, failure isolation, fork-boundary rationale and decision log for the P2 observability slice.
 
 ### Changed
 - `MemoryCompletionResult` accepts optional `usage` (`inputTokens`, `outputTokens`, `costUsd`). The provider only aggregates what the host reports — it never guesses a price table.
