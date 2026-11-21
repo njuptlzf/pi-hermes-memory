@@ -549,6 +549,42 @@
       "baseBlob": "fb15453e5e3b0cd114d8792bf098e81243087f40"
     },
     {
+      "path": "tests/store/session-indexer.test.ts",
+      "status": "applied",
+      "surface": "session indexer tests",
+      "change": "uses a real directory named nope-artifacts with the 'nope-*' exclude glob instead of creating a literal 'nope-*' path",
+      "reason": "Windows forbids wildcard characters in filenames; the literal path made the whole suite fail on Windows while Linux CI passed",
+      "risk": "edit",
+      "anchors": [
+        "excludeDirs"
+      ],
+      "baseBlob": "61d487751197a822560650af9e4348c03072a75a"
+    },
+    {
+      "path": "tests/store/sqlite-lazy-load.test.ts",
+      "status": "applied",
+      "surface": "SQLite lazy-load test",
+      "change": "uses pathToFileURL().href for dynamic ESM imports in the spawned probe",
+      "reason": "Node's ESM loader rejects bare Windows drive paths in import() with ERR_UNSUPPORTED_ESM_URL_SCHEME; file:// URLs work on every platform",
+      "risk": "edit",
+      "anchors": [
+        "better-sqlite3"
+      ],
+      "baseBlob": "e1a5d3ab1a8452397f025671d543970ca0beac97"
+    },
+    {
+      "path": "tests/store/sqlite-native.test.ts",
+      "status": "applied",
+      "surface": "SQLite native loader test",
+      "change": "derives the fake package root with path.join instead of asserting a hard-coded POSIX path",
+      "reason": "Windows returns backslash-separated paths from path.join; the literal POSIX expectation made two subtests fail",
+      "risk": "edit",
+      "anchors": [
+        "better-sqlite3"
+      ],
+      "baseBlob": "b2410bf9b20309d3e34d81acca2cad19bb780799"
+    },
+    {
       "path": "tests/run-all.sh",
       "status": "applied",
       "surface": "test runner",
