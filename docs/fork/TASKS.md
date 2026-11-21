@@ -5,8 +5,8 @@ Companion to `docs/fork/UPSTREAM-MAPPING.md` (what the fork is allowed to change
 and `docs/fork/F0-BASELINE.md` (the measured baseline).
 
 Status verified **2026-11-21** on `main` (fork line graduated from `spike/f0-scoped-entry`).
-Current fork tag: `v0.11.0-scoped.6`. P0 and P1 are complete; P2 is being closed on a PR
-branch. Earlier updates to the host contract and capability flag are recorded inline.
+Current fork tag: `v0.11.0-scoped.6`. P0–P2 are complete (P2 landed on a PR branch and is
+pending merge). Earlier updates to the host contract and capability flag are recorded inline.
 
 ## Done
 
@@ -91,14 +91,14 @@ never passed to the scoped entry. The host contract now exposes an optional
 
 ## P2 — engineering
 
-- [~] Observability: `traceId` + `onMetric` on `provider.open()`, bounded metric
+- [x] Observability: `traceId` + `onMetric` on `provider.open()`, bounded metric
   window with success rate / P95 / cost / tool-failure counts, exposed via
   `session.metrics()`. Instrumentation lives in fork-owned
-  `src/scoped/observability.ts`; upstream tool files stay untouched.
-- [~] Hardening: `completionLimits` in `src/scoped/completion-guard.ts` adds a
+  `src/scoped/observability.ts`; upstream tool files stay untouched (`441444e`)
+- [x] Hardening: `completionLimits` in `src/scoped/completion-guard.ts` adds a
   defensive 15s timeout, one transient retry, and per-tenant serialisation with
   a 250ms minimum start interval. Host limits still win; the provider no longer
-  trusts a host callback to bound itself.
+  trusts a host callback to bound itself (`441444e`)
 - ~~Eval set~~: **done** (`f8f67a2`) — 24 cases, 90% overall / 100% adversarial
   pass line, runs in CI via `*.test.ts`.
 
