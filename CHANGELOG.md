@@ -14,6 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - `MemoryCompletionResult` accepts optional `usage` (`inputTokens`, `outputTokens`, `costUsd`). The provider only aggregates what the host reports — it never guesses a price table.
 
+### Fixed
+- **Full test suite on Windows**: `session-indexer.test.ts`'s `excludeDirs` case created a literal `nope-*` directory name, which Windows rejects (`*` is not allowed in paths). It now creates `nope-artifacts` while still matching the `nope-*` glob, preserving the test's intent on every platform.
+- **`sqlite-lazy-load.test.ts` on Windows**: the spawned ESM probe dynamically imported bare `D:\...` paths, which Node rejects with `ERR_UNSUPPORTED_ESM_URL_SCHEME`. It now uses `pathToFileURL().href`, so the regression guard runs on both Windows and Linux.
+- **`sqlite-native.test.ts` on Windows**: two subtests compared a `path.join`-derived package root with a hard-coded POSIX string. The expectation now uses the same `path.join` value, so the assertions are separator-agnostic.
+
 ## [0.11.0-scoped.6] - 2026-11-20
 
 Fork-only prerelease. Published as `@njuptlzf/pi-hermes-memory` under `next`.

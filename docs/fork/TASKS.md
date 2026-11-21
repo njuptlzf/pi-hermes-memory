@@ -140,6 +140,16 @@ one; and `package.json`'s test script invoked `tests/run-all.sh` directly
 but never fired `session_shutdown`, so Windows could not unlink the open files
 and `rmTestDir` retried until the runner timed out. The test now emits the full
 shutdown handler chain before teardown; 3/3 fast passes.
+`session-indexer.test.ts` also failed on Windows because the `excludeDirs` case
+created a literal `nope-*` directory (`*` is illegal in Windows paths). It now
+creates `nope-artifacts` and still matches the same `nope-*` glob, so the test
+keeps its meaning on both platforms.
+`sqlite-lazy-load.test.ts` failed for the same class of reason: its spawned ESM
+probe imported bare `D:\...` paths, which Node rejects with
+`ERR_UNSUPPORTED_ESM_URL_SCHEME`. It now uses `pathToFileURL().href`.
+`sqlite-native.test.ts` compared a `path.join`-derived package root against a
+hard-coded POSIX path; the expectation now uses `path.join` too, so separators
+no longer matter.
 
 Still slow on this Windows box (pre-existing on clean HEAD, unrelated to fork
 code): `extension-root-migration.test.ts` and a few store tests exceed the

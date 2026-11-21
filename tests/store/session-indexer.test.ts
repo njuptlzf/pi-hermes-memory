@@ -412,8 +412,11 @@ describe('session-indexer', () => {
 
     it('excludeDirs skips whole first-level directories regardless of content', () => {
       const sessionsDir = path.join(tmpDir, 'sessions');
-      // Even a session-shaped file inside an excluded dir must not be indexed.
-      writeJsonlSession(path.join(sessionsDir, 'nope-*', 's9.jsonl'), 's9');
+      // Even a session-shaped file inside a dir matched by an exclude glob
+      // must not be indexed. The real directory name must not contain '*':
+      // Windows forbids wildcard characters in paths (session-parser.test.ts
+      // uses the same "artifacts-x" + 'artifacts-*' pattern convention).
+      writeJsonlSession(path.join(sessionsDir, 'nope-artifacts', 's9.jsonl'), 's9');
       writeJsonlSession(path.join(sessionsDir, 'project-a', 's1.jsonl'), 's1');
 
       const result = indexChangedSessions(dbManager, sessionsDir, { excludeDirs: ['nope-*'] });

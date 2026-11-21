@@ -11,6 +11,10 @@ import {
 } from "../../src/store/sqlite-native.js";
 
 const require = createRequire(import.meta.url);
+// path.join normalises separators; a hard-coded POSIX string fails on Windows
+// where resolve/require return backslash paths.
+const FAKE_PACKAGE_ROOT = path.join("/tmp/fake-npm/node_modules/better-sqlite3");
+const FAKE_LIB_PATH = path.join(FAKE_PACKAGE_ROOT, "lib/index.js");
 
 type RequireCache = Record<string, unknown>;
 
@@ -76,7 +80,7 @@ describe("sqlite-native loader", () => {
       },
       (id: string) => {
         assert.equal(id, "better-sqlite3");
-        return path.join("/tmp/fake-npm/node_modules/better-sqlite3/lib/index.js");
+        return FAKE_LIB_PATH;
       },
     );
 
@@ -85,7 +89,7 @@ describe("sqlite-native loader", () => {
       requireImpl: req,
       rebuild: (packageRoot) => {
         rebuilt = true;
-        assert.equal(packageRoot, "/tmp/fake-npm/node_modules/better-sqlite3");
+        assert.equal(packageRoot, FAKE_PACKAGE_ROOT);
         return { ok: true, detail: "rebuilt" };
       },
     });
@@ -102,7 +106,7 @@ describe("sqlite-native loader", () => {
           "The module 'x.node' was compiled against a different Node.js version using NODE_MODULE_VERSION 108",
         );
       },
-      () => path.join("/tmp/fake-npm/node_modules/better-sqlite3/lib/index.js"),
+      () => FAKE_LIB_PATH,
     );
 
     assert.throws(
@@ -118,7 +122,7 @@ describe("sqlite-native loader", () => {
         assert.match(message, /npm rebuild better-sqlite3/);
         assert.match(message, /Homebrew/);
         assert.match(message, /npm missing/);
-        assert.equal(error.packageRoot, "/tmp/fake-npm/node_modules/better-sqlite3");
+        assert.equal(error.packageRoot, FAKE_PACKAGE_ROOT);
         return true;
       },
     );
