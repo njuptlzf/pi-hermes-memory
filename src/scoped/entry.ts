@@ -5,8 +5,9 @@
  * `MemoryStore` per scope, a cross-scope profile store per user, one SQLite
  * FTS5 mirror per scope, the write tool, the `memory_search` read tool, a
  * policy prompt built from what is actually mounted, and — when the host
- * injects `complete` — background review and session flush through
- * `src/scoped/review-flush.ts`. What this is NOT: the full `src/index.ts`
+ * injects `complete` — correction detection (`src/scoped/correction.ts`) plus
+ * background review and session flush (`src/scoped/review-flush.ts`), all three
+ * sharing one background gate so their writes never overlap. What this is NOT: the full `src/index.ts`
  * surface. TUI commands and session search are excluded on purpose, and the
  * full entry's env-reading / child-process machinery is replaced by injected
  * parameters, for three reasons that are contract requirements of an
@@ -36,6 +37,8 @@ import * as path from "node:path";
 import { defaultMemoryConfig } from "../config.js";
 import { consolidateViaCompletion } from "./consolidation.js";
 import { setupScopedReviewFlush } from "./review-flush.js";
+import { setupScopedCorrectionDetector } from "./correction.js";
+import { createBackgroundGate } from "./background-gate.js";
 import type { MemoryCompletion } from "./completion-types.js";
 import { AtomicLockCoordinator } from "../store/atomic-lock-coordinator.js";
 import { DatabaseManager } from "../store/db.js";
@@ -341,7 +344,11 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
         );
         // Background review (turn-triggered) and flush (shutdown), using the
         // same injected completion. Off when no capability was injected.
-        setupScopedReviewFlush(pi, { store, complete });
+        // Correction detection shares the gate with them: all three can fire
+        // around turn_end, and only one may apply memory operations at a time.
+        const backgroundGate = createBackgroundGate();
+        setupScopedReviewFlush(pi, { store, complete, gate: backgroundGate });
+        setupScopedCorrectionDetector(pi, { store, complete, config, gate: backgroundGate });
       }
     },
     async erase(eraseOptions?: EraseOptions) {

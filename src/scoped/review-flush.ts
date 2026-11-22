@@ -14,6 +14,7 @@
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { createBackgroundGate, type BackgroundGate } from "./background-gate.js";
 import type { MemoryCompletion } from "./completion-types.js";
 import { runMemoryOps } from "./memory-ops.js";
 import type { MemoryStore } from "../store/memory-store.js";
@@ -33,6 +34,12 @@ export interface ScopedReviewFlushOptions {
   readonly reviewEveryTurns?: number;
   /** How many recent messages to include. Default 20. */
   readonly recentMessages?: number;
+  /**
+   * Shared with correction detection so a review and a correction never call
+   * `runMemoryOps` concurrently on the same store. A standalone caller gets a
+   * private gate and keeps the previous in-flight behaviour.
+   */
+  readonly gate?: BackgroundGate;
 }
 
 function conversationParts(ctx: ExtensionContext, recentMessages: number): string[] | null {
@@ -63,9 +70,9 @@ export function setupScopedReviewFlush(pi: ExtensionAPI, options: ScopedReviewFl
   const { store, complete } = options;
   const reviewEvery = Math.max(1, options.reviewEveryTurns ?? 6);
   const recentMessages = options.recentMessages ?? 20;
+  const gate = options.gate ?? createBackgroundGate();
 
   let userTurns = 0;
-  let inFlight = false;
   let flushed = false;
 
   pi.on("message_end", async (event) => {
@@ -73,11 +80,16 @@ export function setupScopedReviewFlush(pi: ExtensionAPI, options: ScopedReviewFl
   });
 
   pi.on("turn_end", async (_event, ctx) => {
-    if (userTurns < reviewEvery || inFlight) return;
+    if (userTurns < reviewEvery) return;
+    // Claim the shared slot before reading state. If correction detection holds
+    // it, skip this round but keep `userTurns` so the next turn still reviews.
+    if (!gate.tryStart()) return;
     const parts = conversationParts(ctx, recentMessages);
-    if (!parts || parts.length === 0) return;
+    if (!parts || parts.length === 0) {
+      gate.finish();
+      return;
+    }
 
-    inFlight = true;
     userTurns = 0;
     try {
       const userPrompt = buildDirectReviewUserPrompt({
@@ -96,7 +108,7 @@ export function setupScopedReviewFlush(pi: ExtensionAPI, options: ScopedReviewFl
     } catch {
       // Never let background review break the session.
     } finally {
-      inFlight = false;
+      gate.finish();
     }
   });
 
@@ -104,8 +116,14 @@ export function setupScopedReviewFlush(pi: ExtensionAPI, options: ScopedReviewFl
     if (flushed) return;
     flushed = true;
     if (userTurns === 0) return; // nothing new since the last review
+    // Do not start a flush while a correction/review still holds the slot.
+    // Flush is best-effort, so skipping beats a concurrent write at teardown.
+    if (!gate.tryStart()) return;
     const parts = conversationParts(ctx, recentMessages);
-    if (!parts || parts.length === 0) return;
+    if (!parts || parts.length === 0) {
+      gate.finish();
+      return;
+    }
 
     try {
       await runMemoryOps({
@@ -116,6 +134,8 @@ export function setupScopedReviewFlush(pi: ExtensionAPI, options: ScopedReviewFl
       });
     } catch {
       // Flush is best-effort at teardown.
+    } finally {
+      gate.finish();
     }
   });
 }
