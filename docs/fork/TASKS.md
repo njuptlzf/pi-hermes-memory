@@ -164,7 +164,7 @@ but it is not scheduled; "延后" means an external prerequisite is missing;
 | 3 | 延后 | Needs a per-scope session source from the host. Reading the host-global sessions directory would leak across tenants. |
 | 4 | 延后 | Depends on #3; the whole index chain must use the same per-scope session source. |
 | 5 | **DONE 2026-11-22** | `src/scoped/correction.ts`: `isCorrection` (pure, reused) + injected `complete` via `runMemoryOps`; failure-memory capture; no subprocess/project/UI. De-duplication via `BackgroundGate` shared with review/flush — all three use one slot. |
-| 6 | 采纳（待排期） | Count tool calls in `turn_end` with existing defaults. Skip UI notification; config knobs come with #21/#22. |
+| 6 | 采纳（待排期） | Count tool calls in `turn_end` with existing defaults. Skip UI notification; config knobs come with #21/#22. **Design: `docs/fork/P4-TUNING-DESIGN.md`** |
 | 7 | 不做 | The tenant root is the scope; a project axis would reintroduce the shared dimension the host deliberately removed. |
 | 8 | 采纳（待排期） | Point `StandingInstructions` at a file under `storageRoot` and render it from `promptSection()`. Prompt only — no agent-authored writes. |
 | 9 | 不做 | `registerCommand` is a no-op in rpc mode; if #8 lands, authoring belongs to a host/user-side surface, not an agent tool. |

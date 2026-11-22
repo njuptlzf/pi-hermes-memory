@@ -229,6 +229,16 @@
       "baseBlob": null
     },
     {
+      "path": "docs/fork/P4-TUNING-DESIGN.md",
+      "status": "applied",
+      "surface": "fork documentation",
+      "change": "P4 design record for #6/#21/#22: read MemoryConfig instead of copying literals, additive nudgeMode, and the minUserTurns guard the turn-counting model no longer inherits",
+      "reason": "Fork-owned file; never conflicts on merge. Written before implementation so the reasoning is reviewable on its own.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
       "path": "docs/fork/divergences.json",
       "status": "applied",
       "surface": "fork registry",
