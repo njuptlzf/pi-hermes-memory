@@ -3,15 +3,19 @@
  *
  * What this is: the tenant-safe composition of hermes' memory core — one
  * `MemoryStore` per scope, a cross-scope profile store per user, one SQLite
- * FTS5 mirror per scope, the write tool, the `memory_search` read tool, and a
- * policy prompt built from what is actually mounted. What this is NOT: the full
- * `src/index.ts` surface. TUI commands, the background review loop, session
- * flush and session search are excluded on purpose, for three reasons that are
- * contract requirements of an in-process host, not preferences:
+ * FTS5 mirror per scope, the write tool, the `memory_search` read tool, a
+ * policy prompt built from what is actually mounted, and — when the host
+ * injects `complete` — background review and session flush through
+ * `src/scoped/review-flush.ts`. What this is NOT: the full `src/index.ts`
+ * surface. TUI commands and session search are excluded on purpose, and the
+ * full entry's env-reading / child-process machinery is replaced by injected
+ * parameters, for three reasons that are contract requirements of an
+ * in-process host, not preferences:
  *
- *   1. They read `process.env` / `os.homedir()` (host owns configuration).
- *   2. The review loop spawns a `pi` child process, but an in-process host owns
- *      process lifetime.
+ *   1. The full entry reads `process.env` / `os.homedir()` (host owns configuration).
+ *   2. Its background work spawns a `pi` child process, but an in-process host
+ *      owns process lifetime; review/flush here use the injected completion
+ *      callback instead (see review-flush.ts).
  *   3. `registerCommand` is a no-op in rpc mode — dead surface that only misleads.
  *
  * The search mirror is deliberately per-scope and lives under `memoryDir`: the
