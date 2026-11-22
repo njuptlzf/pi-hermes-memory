@@ -219,6 +219,16 @@
       "baseBlob": null
     },
     {
+      "path": "docs/fork/WIRING-RATIONALE.md",
+      "status": "applied",
+      "surface": "fork documentation",
+      "change": "design record explaining why scoped wiring is incremental: one engine, two entries, the host contract constraints, and the commit-by-commit sequence",
+      "reason": "Fork-owned file; never conflicts on merge. Records the reasoning so 'unwired' is not mistaken for lost work.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
       "path": "docs/fork/divergences.json",
       "status": "applied",
       "surface": "fork registry",

@@ -1,8 +1,9 @@
 # Scoped fork backlog
 
 Fork-owned file. Upstream does not know this path, so a merge never touches it.
-Companion to `docs/fork/UPSTREAM-MAPPING.md` (what the fork is allowed to change)
-and `docs/fork/F0-BASELINE.md` (the measured baseline).
+Companion to `docs/fork/UPSTREAM-MAPPING.md` (what the fork is allowed to change),
+`docs/fork/F0-BASELINE.md` (the measured baseline) and
+`docs/fork/WIRING-RATIONALE.md` (why capabilities are wired incrementally).
 
 Status verified **2026-11-22** on `main` at `fcdbfa7` (fork line graduated from `spike/f0-scoped-entry`).
 Current fork tag: `v0.11.0-scoped.6`. P0–P2 are complete (P2 merged in PR #3, `f4407f7`).
@@ -111,7 +112,8 @@ Recorded 2026-11-21 by comparing the full Pi entry (`src/index.ts`) with the
 scoped composition (`src/scoped/entry.ts` and `src/scoped/*`). Rows are still
 **candidates, not current work and not a promise to implement**; the assessment
 below records whether each one is worth doing, not a schedule. P3 sits after
-this whole list.
+this whole list. For the reasoning behind this staged, partial wiring — and why
+it is deliberate rather than lost work — see `docs/fork/WIRING-RATIONALE.md`.
 
 | # | Candidate | Upstream surface | Scoped today / known constraint | Analyse before doing |
 | --- | --- | --- | --- | --- |
