@@ -46,7 +46,7 @@ Run `npm run check` and the targeted test files before opening a PR. The full su
 
 ## Conventions
 
-- Every repository uses PRs; never push directly to `main`. Use a git worktree **only when the change touches agent-chat code** — a hermes-scoped change that also modifies agent-chat must be made in an agent-chat worktree, to avoid clashing with sessions in agent-chat's own working tree. For hermes-scoped-only changes, edit in place and merge through a PR; no worktree is needed.
+- Every repository uses PRs; never push directly to `main`.
 - **Fork the boundary, not the engine.** Prefer injected parameters/config in fork-owned files over edits to `src/store/`, `src/tools/` or `src/handlers/`.
 - Register any upstream-file change in `docs/fork/divergences.json` with an upstream baseline blob.
 - The scoped adapter never reads `process.env` / `os.homedir()`, never spawns processes, and never touches credentials. The host owns those.
