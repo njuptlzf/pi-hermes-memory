@@ -517,8 +517,38 @@
       "path": "src/scoped/review-flush.ts",
       "status": "applied",
       "surface": "background review/flush",
-      "change": "turn-triggered review and shutdown flush via injected completion",
-      "reason": "same least-privilege completion contract",
+      "change": "turn-triggered review and shutdown flush via injected completion; uses the shared BackgroundGate so review/flush never overlap a correction",
+      "reason": "same least-privilege completion contract; candidate #5 de-duplication",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "src/scoped/background-gate.ts",
+      "status": "applied",
+      "surface": "background serialization",
+      "change": "single-slot gate shared by correction, review and flush",
+      "reason": "all three call runMemoryOps on turn_end/shutdown; without one slot their operations could overlap on the same store",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "src/scoped/correction.ts",
+      "status": "applied",
+      "surface": "scoped correction detection",
+      "change": "isCorrection (pure) + injected complete via runMemoryOps + failure-memory capture; no subprocess/project/UI",
+      "reason": "candidate #5; host forbids the upstream subprocess/direct-model paths, so the save uses the injected completion",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "tests/scoped/correction.test.ts",
+      "status": "applied",
+      "surface": "fork-owned coverage",
+      "change": "detection, save-through-completion, rate-limit, failure capture, failure isolation, no-UI, shared-gate de-dup",
+      "reason": "candidate #5 needs its own contract tests",
       "risk": "new",
       "anchors": [],
       "baseBlob": null
