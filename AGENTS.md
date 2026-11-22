@@ -49,6 +49,44 @@ Run `npm run check` and the targeted test files before opening a PR. The full su
 - Every repository uses PRs; never push directly to `main`.
 - **Fork the boundary, not the engine.** Prefer injected parameters/config in fork-owned files over edits to `src/store/`, `src/tools/` or `src/handlers/`.
 - Register any upstream-file change in `docs/fork/divergences.json` with an upstream baseline blob.
+
+### Porting upstream behavior into `src/scoped/`
+
+A scoped reimplementation is justified **only** by a constraint that makes the
+upstream code unusable — never by convenience, preference, or an assumption of
+better performance. If the upstream path could run, use it; a needless rewrite
+is a fork defect, not a feature. Before writing scoped code that mirrors an
+upstream handler, classify every difference:
+
+| Class | Test | Required treatment |
+|---|---|---|
+| **Forced** | The upstream path is structurally unusable in-process: it spawns a process, reads `process.env`/`os.homedir()`, needs `model`/`modelRegistry` the host never passes, registers an inert rpc command, or assumes a project axis the tenant root replaces | Rewrite, and record the constraint in the file header |
+| **Unforced drift** | Behavior or defaults diverge with no such constraint — a literal default copied by hand, a config field left unread, a threshold hardcoded | **Defect.** Delete the drift and read upstream's source of truth |
+| **Additive** | A new option upstream does not have, in a fork-owned type, changing no upstream file | Allowed; document why |
+
+Rules that follow from this:
+
+- **Read upstream's config, do not copy its numbers.** Thresholds, budgets and
+  limits come from `MemoryConfig` (e.g. `nudgeInterval`, `nudgeToolCalls`,
+  `reviewRecentMessages`, `reviewEnabled`). A literal like `?? 6` next to a
+  config field with a different value is drift, and it also makes the config
+  field dead.
+- **Reuse upstream's pure functions instead of re-deriving them.** Helpers such
+  as `isCorrection()`, `collectMessageParts()`, `buildDirectReviewUserPrompt()`
+  and the prompt constants are safe to import from `src/handlers/` and
+  `src/constants.ts`; importing reads upstream, it does not modify it.
+- **A capability the host injects must actually be honored.** If
+  `reviewEnabled: false` reaches the tenant, review must not run. Shipping a
+  switch that nobody reads is the same class of bug as inventing a default.
+- **Only the forced list earns a divergence.** If a change touches no upstream
+  file and adds nothing to `divergences.json`, it had better be either forced
+  or additive — otherwise the fork is drifting for no reason.
+
+When scoped behavior must differ because a forced constraint changes the
+counting or timing model, say so explicitly in the design record and preserve
+the upstream guard that the new model no longer gets for free (for example,
+counting `turn_end` instead of user messages loses the implicit
+`minUserTurns` protection and must re-add it as an option).
 - The scoped adapter never reads `process.env` / `os.homedir()`, never spawns processes, and never touches credentials. The host owns those.
 - Observability is best-effort: a metric sink must never change a tool result or break a memory operation.
 - Tool-call metrics are installed with a Proxy at the entry boundary; upstream tool files stay untouched.

@@ -66,6 +66,33 @@ Rule of thumb: **if a change can be expressed as an injected parameter or a
 config value, it is not an engine change.** Every entry in §2 qualifies; none of
 the entries in §3 do.
 
+### 3.1 Scoped reimplementation: forced, drift, or additive
+
+Most of `src/scoped/` restates an upstream handler at a different boundary. That
+is legitimate **only** where the upstream path cannot run in-process. Every
+difference must fall into one of three classes; anything else is a fork defect:
+
+| Class | Test | Treatment |
+| --- | --- | --- |
+| **Forced** | upstream spawns a process, reads `process.env`/`os.homedir()`, needs `model`/`modelRegistry`, registers an inert rpc command, or assumes a project axis | rewrite + name the constraint in the file header |
+| **Unforced drift** | a default or behavior differs with no such constraint (a hand-copied literal, an unread config field, a hardcoded threshold) | **defect** — delete it and read upstream's source of truth |
+| **Additive** | a new option in a fork-owned type, touching no upstream file | allowed; document why |
+
+Concretely: scoped handlers must **read `MemoryConfig`** (`nudgeInterval`,
+`nudgeToolCalls`, `reviewRecentMessages`, `reviewEnabled`) rather than restate
+the numbers, and must **import upstream's pure helpers** (`isCorrection`,
+`collectMessageParts`, `buildDirectReviewUserPrompt`, prompt constants) rather
+than re-derive them. A host-injected switch such as `reviewEnabled: false` must
+actually stop the work. `src/scoped/review-flush.ts` originally hardcoded
+`reviewEveryTurns ?? 6` while leaving `config.nudgeInterval` unread — that is
+unforced drift, corrected when #21/#22 were wired.
+
+When a forced constraint changes the counting or timing model, the upstream
+guard that came free with the old model must be re-added explicitly. Counting
+`turn_end` instead of user messages, for example, loses the implicit
+"at least N user messages before review" protection and has to restore it as an
+option.
+
 ## 4. Upstream update checklist
 
 Run these on every upstream release, in order:
