@@ -93,6 +93,48 @@ guard that came free with the old model must be re-added explicitly. Counting
 "at least N user messages before review" protection and has to restore it as an
 option.
 
+## 3.2 Design records must be executable, not aspirational
+
+Every design record under `docs/fork/` (`P2-OBSERVABILITY-DESIGN.md`,
+`WIRING-RATIONALE.md`, `P4-TUNING-DESIGN.md`, …) is a **contract for the
+implementation**, not a sketch. A reviewer must be able to implement from it
+without guessing, and a reviewer must be able to find every claim's source.
+Four things are mandatory. A design missing any one of them is incomplete:
+
+1. **Accurate cross-references.** Every `§x.y`, file path, symbol name and
+   line number cited in the record must point at the thing it claims. Check
+   them after writing, not before. A wrong reference (`§5` for a guard that
+   lives in `§5.1`) is a defect — it sends the implementer to the wrong place
+   and silently produces a wrong implementation.
+2. **Concrete call chain, with the actual code shape.** Do not say "pass the
+   config through" or "wire the option". Show the chain from the host-facing
+   type down to the handler, with the real assignment/mount call. Pay special
+   attention to fields that **do not** travel through the normal config object
+   — e.g. an additive option typed in a fork-owned interface cannot be folded
+   into `MemoryConfig` and must be passed explicitly at `mount()`. Listing a
+   field in a type without showing where it is read is exactly the "switch
+   nobody reads" bug this fork treats as a defect.
+3. **Impact surface: every file on the chain.** A table of files touched, each
+   marked fork-owned / diverged, plus the **callers** of each changed
+   signature. If a signature changes, list its existing call sites and say
+   whether each was updated or intentionally left on the default. "No
+   upstream file touched" must be demonstrated by naming the files checked,
+   not asserted.
+4. **Change risks, including default-value changes.** A new config source can
+   silently change behavior when an old hardcoded default and the upstream
+   default differ (scoped's `?? 20` vs upstream's `0` = all messages is the
+   concrete case). Each such change must be stated explicitly with a decision
+   — align and document, or keep and justify as additive — and recorded in
+   the Risks section with its cost/semantics consequence. "Hoped for the
+   best" is not a mitigation.
+
+These obligations come from a real review finding: a design that said
+"thresholds come from config" omitted that `nudgeMode` and
+`minUserTurnsBeforeReview` are **not** config fields and need explicit
+passing, omitted a default-value change, and carried a wrong section
+reference. Two of those would have caused implementation rework; all three
+were invisible until the record was checked line by line.
+
 ## 4. Upstream update checklist
 
 Run these on every upstream release, in order:

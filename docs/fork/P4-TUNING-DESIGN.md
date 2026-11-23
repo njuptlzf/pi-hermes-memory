@@ -70,7 +70,7 @@ Consequences for the design:
 - The threshold's meaning is defined by the counting mode, not by the number.
   `nudgeInterval: 10` means "10 assistant turns" under `turn`/`either`, and is
   irrelevant under `tool`.
-- Because the unit changes, the implicit guard described in §5 disappears.
+- Because the unit changes, the implicit guard described in **§5.1** disappears.
 
 ## 4. Option surface
 
@@ -153,6 +153,51 @@ const config: MemoryConfig = {
 };
 ```
 
+### 4.2.1 Full call chain — exact code shapes
+
+There are **two different transports** for tuning values. Confusing them is
+the "switch nobody reads" bug, so the chain is written out in full:
+
+**Chain A — fields that exist in `MemoryConfig`** (`nudgeInterval`,
+`nudgeToolCalls`, `reviewRecentMessages`, `reviewEnabled`):
+
+```
+ProviderContext.tuning.reviewEveryTurns
+  → provider.open(): openScopedHermesMemory({ ..., tuning: ctx.tuning })
+  → entry.openWithRoots(): config = { ...defaultMemoryConfig(), ...options.config,
+        nudgeInterval: options.tuning.reviewEveryTurns ?? config.nudgeInterval, ..., memoryDir }
+  → entry.mount(): setupScopedReviewFlush(pi, { store, complete, gate, config })
+  → review-flush.turn_end: const nudgeInterval = options.reviewEveryTurns ?? config.nudgeInterval
+```
+
+**Chain B — additive fields with no `MemoryConfig` counterpart**
+(`nudgeMode`, `minUserTurnsBeforeReview`). These **cannot** be folded into
+`config`; if that is attempted they are silently dropped. They must be passed
+explicitly at the mount site, which is the only production caller:
+
+```
+ProviderContext.tuning.nudgeMode
+  → provider.open(): openScopedHermesMemory({ ..., tuning: ctx.tuning })
+  → entry.mount():
+      setupScopedReviewFlush(pi, {
+        store, complete, gate, config,
+        nudgeMode: options.tuning?.nudgeMode,                          // explicit
+        minUserTurnsBeforeReview: options.tuning?.minUserTurnsBeforeReview, // explicit
+      });
+  → review-flush.turn_end: const nudgeMode = options.nudgeMode ?? "either"
+```
+
+Chain B has exactly **one production call site**. Verified by grep:
+`src/scoped/entry.ts:350` is the only caller outside tests. The seven test
+call sites in `tests/scoped/review-flush.test.ts` omit both fields and must
+continue to work on the defaults — hence both remain optional.
+
+Failure mode to guard against: adding `nudgeMode` to `ScopedMemoryTuning` and
+`ScopedReviewFlushOptions` but not to the `entry.ts` mount call. Type checking
+will not catch it (both fields are optional), tests for Chain A will still
+pass, and the host's setting will be silently ignored. §7 test 10 exists
+specifically to fail in that case.
+
 ### 4.3 `ProviderContext` (`src/scoped/provider.ts`) — #21
 
 ```ts
@@ -166,7 +211,7 @@ interface ProviderContext {
 `open()` passes it straight through. The provider still imports no host SDK;
 `ScopedMemoryTuning` is a structural shape.
 
-### 4.4 Effect on `#[22]` review/flush config surface
+### 4.4 Effect on #22 review/flush config surface
 
 With the above, these become live:
 
@@ -180,6 +225,32 @@ With the above, these become live:
 `flushMinTurns` / `flushRecentMessages` are **not** wired in this slice: flush
 already runs at most once and only when `userTurns > 0`. Wiring them would add
 knobs with no observed need; noted as a non-goal rather than a silent gap.
+
+**Default-value decision for `reviewRecentMessages` (explicit):** scoped
+currently uses `options.recentMessages ?? 20`; upstream's
+`DEFAULT_REVIEW_RECENT_MESSAGES = 0`, and `applyRecentMessageLimit(parts, 0)`
+returns **all** parts. Making the config field live therefore moves the
+effective default from "last 20 messages" to "all messages". **Decision: align
+with upstream (0 = all).** Rationale: the standard in `UPSTREAM-MAPPING.md` §3.1
+forbids diverging on a performance assumption, and 20 was an unforced literal
+with no recorded justification. The cost consequence is recorded in §8 risk
+R2, and a host that wants the old bound can set `tuning.recentMessages: 20`.
+This is a deliberate behavior change, not an accidental one.
+
+### 4.4.1 Callers of changed signatures
+
+| Symbol | Call sites | Treatment |
+| --- | --- | --- |
+| `setupScopedReviewFlush(pi, options)` | `src/scoped/entry.ts:350` (production); `tests/scoped/review-flush.test.ts` ×7 | Production updated with `config` + Chain B fields. Tests keep omitting the new optional fields and exercise defaults; new dedicated tests added in `tests/scoped/tuning.test.ts` |
+| `openScopedHermesMemory(options)` | `src/scoped/provider.ts:100` (production); `tests/scoped/*.test.ts` | `tuning` is optional, so existing callers are source-compatible |
+| `ProviderSession` / `provider.open()` | agent-chat `memory-providers.ts` (structural) | Additive optional field; no host change required |
+
+All three are fork-owned signatures. **Upstream files checked for accidental
+edits:** `src/types.ts`, `src/handlers/background-review.ts`,
+`src/handlers/message-parts.ts`, `src/config.ts` — none is modified by this
+slice; `src/config.ts` was already diverged before this work and gains no new
+hunk. `docs/fork/divergences.json` gains **no** code entry (only the design
+document entry already registered).
 
 ## 5. Counting implementation
 
@@ -257,12 +328,20 @@ turns can also occur within one user message.
    not review; after the third user message it does.
 8. **Precedence** — explicit option beats config beats default.
 9. **Gate still shared** — a held gate leaves counters intact for the next turn.
+10. **Chain B is actually wired** (`nudgeMode` + `minUserTurnsBeforeReview`) —
+    assert through the **entry mount**, not by calling `setupScopedReviewFlush`
+    directly: mount a handle with `tuning: { nudgeMode: "tool" }`, fire a turn
+    with many `toolResults` and few assistant turns, and confirm a review
+    happened. A design/impl that only adds the type fields but forgets the
+    `entry.ts` mount call will fail here and pass tests 1-9.
 
 ## 8. Risks
 
-| Risk | Mitigation |
-| --- | --- |
-| Behavior change: review may fire more often under `either` | Documented; host sets `nudgeMode: "turn"` to keep the old cadence |
-| Cost: each review is a full completion | `minUserTurnsBeforeReview` bounds early firing; `nudgeMode` is host-controlled |
-| `config` optional in `ScopedReviewFlushOptions` | Falls back to `defaultMemoryConfig()` so standalone tests keep working |
-| Windows: fake pi + SQLite handles | Handler-level tests only; no entry-level integration test (see 2026-11-22 lesson) |
+| ID | Risk | Mitigation / decision |
+| --- | --- | --- |
+| R1 | Behavior change: review may fire more often under `either` | Documented; host sets `nudgeMode: "turn"` to keep the old cadence |
+| R2 | **Default-value change:** `reviewRecentMessages` effective default moves from scoped's `20` to upstream's `0` (all messages), so the review prompt can grow substantially in long sessions and cost more per completion | **Intentional alignment** per §4.4; a host can restore the old bound with `tuning.recentMessages: 20`. Test 3 pins the explicit-value path; the default change is called out here rather than hidden |
+| R3 | Chain B fields silently dropped if not passed at `entry.ts` mount | §4.2.1 shows the exact mount call; test 10 asserts the behavior through the entry, not the handler |
+| R4 | Cost: each review is a full completion | `minUserTurnsBeforeReview` bounds early firing; `nudgeMode` is host-controlled |
+| R5 | `config` optional in `ScopedReviewFlushOptions` | Falls back to `defaultMemoryConfig()` so standalone tests keep working |
+| R6 | Windows: fake pi + SQLite handles | Handler-level tests only; no entry-level integration test (see 2026-11-22 lesson). Test 10 uses a minimal fake pi with `on`/`registerTool`, and disposes the handle before removing temp dirs |

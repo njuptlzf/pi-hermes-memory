@@ -92,6 +92,17 @@ the upstream guard that the new model no longer gets for free (for example,
 counting `turn_end` instead of user messages loses the implicit
 `minUserTurns` protection and must re-add it as an option).
 
+**Design records are implementation contracts.** Before writing scoped code,
+the design record under `docs/fork/` must contain all four of: accurate
+cross-references (§numbers, symbols, paths, line numbers checked after
+writing), the concrete call chain with real code shapes (especially fields
+that bypass the normal config object and must be passed explicitly at
+`mount()`), the full impact surface (every file plus every caller of a changed
+signature), and explicit change risks including default-value changes (state
+the decision: align and document, or keep and justify as additive). A record
+missing any of these is incomplete — see `UPSTREAM-MAPPING.md` §3.2 for the
+rationale and the review finding that produced this rule.
+
 ## Engine invariants
 
 - Upstream entry injects a frozen memory snapshot at session start; do not mutate memory mid-session.
