@@ -52,6 +52,7 @@ import { registerMemoryTool } from "../tools/memory-tool.js";
 import { attachRetrieval, type RetrievalBudget } from "./retrieval.js";
 import type { MemoryConfig } from "../types.js";
 import { createLayeredStore } from "./layered-store.js";
+import { replaceOwnedBlocks } from "./prompt-blocks.js";
 import { buildScopedMemoryPolicy } from "./policy.js";
 import { resolveScopedRoots, scopedLayout, type ScopedLayout, type ScopedRootInput, type ScopedRoots } from "./roots.js";
 import { guardCompletion, type CompletionLimits } from "./completion-guard.js";
@@ -85,6 +86,13 @@ export interface ScopedMemoryTuning {
   readonly nudgeToolCalls?: number;
   /** Recent messages in the review prompt; maps to `config.reviewRecentMessages`. */
   readonly recentMessages?: number;
+  /**
+   * Enable background review and session flush. Maps to
+   * `config.reviewEnabled`; upstream default true. A provider-loaded host has
+   * no other route to this switch — `review-flush.ts` honours the config field
+   * but `ProviderContext` has no `config` passthrough (P5 §8 R8 / PR-A).
+   */
+  readonly reviewEnabled?: boolean;
 }
 
 export interface ScopedHermesOptions extends ScopedRootInput {
@@ -198,6 +206,9 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
     ...(tuning?.reviewEveryTurns !== undefined ? { nudgeInterval: tuning.reviewEveryTurns } : {}),
     ...(tuning?.nudgeToolCalls !== undefined ? { nudgeToolCalls: tuning.nudgeToolCalls } : {}),
     ...(tuning?.recentMessages !== undefined ? { reviewRecentMessages: tuning.recentMessages } : {}),
+    // Chain A: reviewEnabled is a real MemoryConfig field, so it folds here.
+    // Chain B's additive knobs are passed to setupScopedReviewFlush below.
+    ...(tuning?.reviewEnabled !== undefined ? { reviewEnabled: tuning.reviewEnabled } : {}),
     // The injected root wins over any `memoryDir` in `options.config`: allowing
     // both would let a caller misconfigure one tenant into another's directory.
     memoryDir: layout.memoryDir,
@@ -340,12 +351,18 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
           // runners only honour a returned `systemPrompt`.
           const promptOptions = event.systemPromptOptions;
           if (promptOptions && "sections" in promptOptions) {
-            promptOptions.appendSystemPrompt = [promptOptions.appendSystemPrompt, section]
-              .filter(Boolean)
-              .join("\n\n");
+            // A host with selfInjects:false already rendered the section. Strip
+            // our own blocks first so the single surviving copy is the fresh
+            // one — a stale profile copy can diverge after a mid-session fix.
+            promptOptions.appendSystemPrompt = replaceOwnedBlocks(
+              String(promptOptions.appendSystemPrompt ?? ""),
+              section,
+            );
             return;
           }
-          return { systemPrompt: event.systemPrompt + "\n\n" + section };
+          // 0.80.x–0.85.x: the returned string is the whole prompt, so the
+          // strip runs over the assembled text rather than over an append slot.
+          return { systemPrompt: replaceOwnedBlocks(event.systemPrompt, section) };
         });
       }
 
