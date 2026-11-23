@@ -7,17 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0-scoped.7] - 2026-11-23
+
+Fork-only prerelease. Published as `@njuptlzf/pi-hermes-memory` under `next`.
+
 ### Added
+- **Standing instructions at the user level (P5 candidate #8)**: a user's pinned `<sharedRoot>/profile/STANDING.md` (scope fallback to `<memoryDir>/STANDING.md`) is loaded once per session and injected as a `<standing-instructions>` block **last** in every prompt, marked as the user's own directive. Prompt-only — no tool or command can write the file; authoring stays with the user/editor or host. Enable with `tuning.standingInstructions` (maps to upstream `standingInstructionsEnabled`, default true). Isolated per user, shared across that user's scopes.
+- **Correction detection (candidate #5)**: `src/scoped/correction.ts` detects user corrections via the upstream pure `isCorrection()` and saves them through the injected `complete` callback via `runMemoryOps`; no subprocess, project axis or UI. Shares one `BackgroundGate` with review/flush so background writes never overlap.
+- **Review tuning (candidates #6/#21/#22)**: `ScopedMemoryTuning` on the provider port exposes review cadence/budget knobs (`reviewEveryTurns`, `nudgeToolCalls`, `recentMessages`, `reviewEnabled`) that fold into `MemoryConfig`, plus additive `nudgeMode` (`turn`/`tool`/`either`) and `minUserTurnsBeforeReview` passed explicitly at the mount. Scoped code now reads `MemoryConfig` instead of hardcoded literals; `turn_end` counts tool calls, and the lost `minUserTurns` guard is restored as an option. `reviewRecentMessages` default aligned to upstream `0` (all messages).
 - **P2 observability for the scoped provider**: hosts may pass `traceId` and `onMetric` to `provider.open()`; every `open`, tool `execute` and `erase` now emits a bounded, structured event. `session.metrics()` / `handle.metrics()` aggregate success rate, P95, tool-failure counts and host-reported token/cost usage. The metric sink is best-effort — a throwing host callback can never break a memory operation.
 - **P2 provider-side hardening for background completions**: `completionLimits` adds a defensive 15s per-attempt timeout, one bounded retry for transient failures, and per-tenant serialisation with a 250ms minimum start interval. A callback that ignores its `AbortSignal` can no longer hang the scoped adapter. Host-owned timeouts/budgets remain the source of truth; these are defensive defaults.
-- **As-implemented design record** `docs/fork/P2-OBSERVABILITY-DESIGN.md`: public surface, event/snapshot data model, trace-id lifecycle, instrumentation points, failure isolation, fork-boundary rationale and decision log for the P2 observability slice.
+- **Design records** `docs/fork/P2-OBSERVABILITY-DESIGN.md`, `docs/fork/P4-TUNING-DESIGN.md`, `docs/fork/P5-STANDING-DESIGN.md`, `docs/fork/UPSTREAM-MAPPING.md` §3: executable implementation contracts (accurate cross-references, real call chains, full impact surface, explicit default-value decisions).
 
 ### Changed
 - `MemoryCompletionResult` accepts optional `usage` (`inputTokens`, `outputTokens`, `costUsd`). The provider only aggregates what the host reports — it never guesses a price table.
 - `AGENTS.md` is now standing project guidance only: commands, layout, conventions, security, manual fork release and dated gotchas. Task status moved out to `docs/fork/TASKS.md`; upstream release instructions and historical v0.1/v0.2 pointers were removed. It now also states that "what's next" is answered only from the tracker, never from roadmap/proposal docs.
-- `docs/0.7/TASKS.md` is renamed to `docs/0.7/PROPOSAL.md` and given an explicit role header: a proposal with design items, not a task tracker. `docs/ROADMAP.md` references are updated, and its fork-line version note is corrected to `v0.11.0-scoped.6`.
+- `docs/0.7/TASKS.md` is renamed to `docs/0.7/PROPOSAL.md` and given an explicit role header: a proposal with design items, not a task tracker. `docs/ROADMAP.md` references are updated, and its fork-line version note is corrected to `v0.11.0-scoped.7`.
 
 ### Fixed
+- **D1 — duplicate prompt injection on the host path**: with `selfInjects:false` the host pre-injects `promptSection()` and the entry hook also appended it, so the policy/profile arrived twice (and a mid-session profile correction left a stale copy). New fork-owned `src/scoped/prompt-blocks.ts` strips this provider's own blocks before appending the fresh section, in both pi branches (1.5.x `sections` and 0.80.x fallthrough).
+- **R8 — `reviewEnabled` unreachable from the provider port**: a provider-loaded host had no way to turn review/flush off; `tuning.reviewEnabled` now folds into `config.reviewEnabled` and is honoured.
 - **Full test suite on Windows**: `session-indexer.test.ts`'s `excludeDirs` case created a literal `nope-*` directory name, which Windows rejects (`*` is not allowed in paths). It now creates `nope-artifacts` while still matching the `nope-*` glob, preserving the test's intent on every platform.
 - **`sqlite-lazy-load.test.ts` on Windows**: the spawned ESM probe dynamically imported bare `D:\...` paths, which Node rejects with `ERR_UNSUPPORTED_ESM_URL_SCHEME`. It now uses `pathToFileURL().href`, so the regression guard runs on both Windows and Linux.
 - **`sqlite-native.test.ts` on Windows**: two subtests compared a `path.join`-derived package root with a hard-coded POSIX string. The expectation now uses the same `path.join` value, so the assertions are separator-agnostic.
