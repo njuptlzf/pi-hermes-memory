@@ -5,9 +5,11 @@ Companion to `docs/fork/UPSTREAM-MAPPING.md` (what the fork is allowed to change
 `docs/fork/F0-BASELINE.md` (the measured baseline) and
 `docs/fork/WIRING-RATIONALE.md` (why capabilities are wired incrementally).
 
-Status verified **2026-11-22** on `main` at `fcdbfa7` (fork line graduated from `spike/f0-scoped-entry`).
-Current fork tag: `v0.11.0-scoped.6`. P0–P2 are complete (P2 merged in PR #3, `f4407f7`).
-The 22 candidate rows were assessed in order on 2026-11-22; P3 is now explicitly
+Status verified **2026-11-23** on `main` at `8937aae` (fork line graduated from `spike/f0-scoped-entry`).
+Current fork tag: `v0.11.0-scoped.7`. P0–P2 are complete (P2 merged in PR #3, `f4407f7`);
+all 5 adopted candidate rows are also complete.
+The 22 candidate rows were assessed in order on 2026-11-22; the 5 adopted rows
+(#5, #6, #8, #21, #22) were implemented 2026-11-22/23. P3 is now explicitly
 lower priority than all of them. Earlier updates to the host contract and
 capability flag are recorded inline.
 
@@ -32,7 +34,7 @@ capability flag are recorded inline.
 | **P5 PR-A — D1 duplicate injection + R8 `reviewEnabled` port gap** | PR #21, `344f412` | `src/scoped/prompt-blocks.ts` strips our own policy/profile/standing tags before appending the fresh section, in both pi branches; `tuning.reviewEnabled` folds into config (Chain A). Tests `tests/scoped/prompt-blocks.test.ts` (7 cases). No pin code. |
 | **Standing instructions (candidate #8, P5 PR-B)** | PR #22, `feb9596` | `layout.standingFile` absolute beside `USER.md` (profile dir, scope fallback); `StandingInstructions` built iff enabled, lazy-loaded once, rendered last in `promptSection()`; `tuning.standingInstructions` → config. Prompt only — no write surface. Design `docs/fork/P5-STANDING-DESIGN.md`, tests `tests/scoped/standing.test.ts` (8 cases) |
 
-Official npm state (verified 2026-11-20): `latest = 0.11.0-scoped.1` (untouched), `next = 0.11.0-scoped.6`.
+Official npm state (verified 2026-11-23): `latest = 0.11.0-scoped.1` (untouched), `next = 0.11.0-scoped.7`.
 agent-chat packages are at `v0.8.0` across protocol/server/web (separate repo).
 The local `npmmirror.com` mirror lags — do not use it to judge publish state;
 pin `--registry=https://registry.npmjs.org --prefer-online` when verifying.
@@ -150,9 +152,10 @@ FTS5 mirror, per-turn automatic retrieval, auto-consolidation / background
 review / session flush when `complete` is injected, secret scanning, memory
 aging, extended store, metrics, `erase()` and `dispose()`.
 
-Housekeeping found during the comparison: the header comment in
-`src/scoped/entry.ts` still says background review and session flush are
-excluded; the code now wires both through `src/scoped/review-flush.ts`.
+Housekeeping found during the comparison — **DONE**: the header comment in
+`src/scoped/entry.ts` was corrected; it now documents that background review and
+session flush are wired through `src/scoped/review-flush.ts` (and correction
+detection through `src/scoped/correction.ts`), all sharing one background gate.
 
 ### Assessment (2026-11-22)
 
