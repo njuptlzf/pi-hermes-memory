@@ -28,6 +28,7 @@ capability flag are recorded inline.
 | `capabilities.sharedProfile: true` declaration (C6) + `0.11.0-scoped.5` release | `14374c1` | consumed by agent-chat capability contract |
 | Host completion contract consumed end to end | agent-chat `v0.8.0` | agent-chat PR #6 merged/published 2026-11-20; `complete` now injected into scoped entry |
 | **Correction detection (candidate #5)** | — | `src/scoped/correction.ts`: `isCorrection` + injected `complete` via `runMemoryOps`, failure-memory capture, no subprocess/project/UI; shares a `BackgroundGate` with review/flush |
+| **Review tuning (#6 + #21 + #22)** | — | Read `MemoryConfig` instead of the `?? 6` literal; `turn_end` counts `toolResults`; `nudgeMode` + `minUserTurnsBeforeReview` additive in fork-owned types; `ProviderContext.tuning` passthrough. Design `docs/fork/P4-TUNING-DESIGN.md`, tests `tests/scoped/tuning.test.ts` |
 
 Official npm state (verified 2026-11-20): `latest = 0.11.0-scoped.1` (untouched), `next = 0.11.0-scoped.6`.
 agent-chat packages are at `v0.8.0` across protocol/server/web (separate repo).
@@ -164,7 +165,7 @@ but it is not scheduled; "延后" means an external prerequisite is missing;
 | 3 | 延后 | Needs a per-scope session source from the host. Reading the host-global sessions directory would leak across tenants. |
 | 4 | 延后 | Depends on #3; the whole index chain must use the same per-scope session source. |
 | 5 | **DONE 2026-11-22** | `src/scoped/correction.ts`: `isCorrection` (pure, reused) + injected `complete` via `runMemoryOps`; failure-memory capture; no subprocess/project/UI. De-duplication via `BackgroundGate` shared with review/flush — all three use one slot. |
-| 6 | 采纳（待排期） | Count tool calls in `turn_end` with existing defaults. Skip UI notification; config knobs come with #21/#22. **Design: `docs/fork/P4-TUNING-DESIGN.md`** |
+| 6 | **DONE 2026-11-23** | `turn_end` counts `event.toolResults.length`; `nudgeMode` (`turn`/`tool`/`either`, default `either`) in fork-owned `ScopedReviewFlushOptions`; no UI notification. **Design: `docs/fork/P4-TUNING-DESIGN.md`**, tests `tests/scoped/tuning.test.ts` |
 | 7 | 不做 | The tenant root is the scope; a project axis would reintroduce the shared dimension the host deliberately removed. |
 | 8 | 采纳（待排期） | Point `StandingInstructions` at a file under `storageRoot` and render it from `promptSection()`. Prompt only — no agent-authored writes. |
 | 9 | 不做 | `registerCommand` is a no-op in rpc mode; if #8 lands, authoring belongs to a host/user-side surface, not an agent tool. |
@@ -179,15 +180,16 @@ but it is not scheduled; "延后" means an external prerequisite is missing;
 | 18 | 延后 | Depends on #3–#4; without a per-scope session source there is nothing to index. |
 | 19 | 不做 | The host assembles its own prompt; `legacy-inject` conflicts with `selfInjects:false` and raises token/isolation risk. |
 | 20 | 不做 | Tenant roots are host-computed, so upstream legacy migration sources do not exist; mirror reconciliation is the repair path. |
-| 21 | 采纳（待排期） | Fork-owned parameter passthrough with low merge cost; unlocks tuning for #6/#22 and profile/retrieval budgets. |
-| 22 | 采纳（待排期） | Implement with #6/#21: pass review/flush knobs, keep UI notification out. |
+| 21 | **DONE 2026-11-23** | `ScopedMemoryTuning` on `ScopedHermesOptions` + `ProviderContext.tuning`; config-mapped fields fold into `MemoryConfig`, additive knobs (`nudgeMode`, `minUserTurnsBeforeReview`) are passed explicitly at the mount (design §4.2.1) |
+| 22 | **DONE 2026-11-23** | `reviewEnabled`, `nudgeInterval`, `nudgeToolCalls`, `reviewRecentMessages` are now read by scoped code (were dead). Default `reviewRecentMessages` aligned to upstream `0` = all messages; see design risk R2 |
 
 Summary: **5 采纳**（#5, #6, #8, #21, #22）, **7 延后**（#1, #2, #3, #4, #11, #12, #18）,
 **10 不做**（#7, #9, #10, #13, #14, #15, #16, #17, #19, #20）. If work starts, take
 adopted rows in numeric order; #21/#22 travel with #6.
-**#5 is now done** (2026-11-22); remaining adopted rows in order: #6, #8, #21/#22.
-The next candidate is **#6 — tool-call-aware review nudge** (count tool calls in
-`turn_end`, reuse the shared gate, no UI notify; config knobs come with #21/#22).
+**Done so far: #5, #6, #21, #22** (2026-11-22 / 2026-11-23). The only adopted
+row still open is **#8 — standing instructions** (point `StandingInstructions`
+at a file under `storageRoot`, render from `promptSection()`; prompt only, no
+agent-authored writes). Deferred and rejected rows are unchanged.
 
 ## P3 — CI auto-publish (deferred; lowest priority, after the 22 candidates)
 

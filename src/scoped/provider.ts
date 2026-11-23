@@ -15,7 +15,7 @@
  * makes the injection explicit instead of accidentally absent.
  */
 
-import { openScopedHermesMemory, type ScopedHermesHandle } from "./entry.js";
+import { openScopedHermesMemory, type ScopedHermesHandle, type ScopedMemoryTuning } from "./entry.js";
 import type { MemoryCompletion } from "./completion-types.js";
 import type { CompletionLimits } from "./completion-guard.js";
 import {
@@ -51,6 +51,12 @@ interface ProviderContext {
   readonly onMetric?: (event: ScopedMetricEvent) => void;
   /** Defensive limits for background completions. Host limits still win. */
   readonly completionLimits?: CompletionLimits;
+  /**
+   * Policy knobs forwarded to the tenant (review cadence, tool-call trigger,
+   * prompt budget). Optional; absent means upstream defaults. Structural shape
+   * — the provider still imports no host SDK.
+   */
+  readonly tuning?: ScopedMemoryTuning;
 }
 
 interface ProviderSession {
@@ -103,6 +109,7 @@ const provider: ScopedHermesProvider = {
         complete: ctx.complete,
         telemetry,
         completionLimits: ctx.completionLimits,
+        tuning: ctx.tuning,
       });
       return {
         providerId: PROVIDER_ID,

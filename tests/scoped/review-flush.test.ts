@@ -12,6 +12,11 @@ import { MemoryStore } from "../../src/store/memory-store.js";
  * Scoped background review + flush, driven by the same injected completion.
  * Tests mount the handler on a fake pi, fire the real pi events, and assert
  * the completion was called (or deliberately not called) with a bounded plan.
+ *
+ * Counting semantics (P4): review counts `turn_end` (assistant turns), not
+ * user messages, and requires `minUserTurnsBeforeReview` user messages first
+ * (default 3). Tests therefore emit both message_end events and turn_end
+ * events; `turnResults` carries the tool-call count.
  */
 
 interface Handler { (event: any, ctx: any): Promise<void> | void }
@@ -34,6 +39,25 @@ function branch(turns: number): any[] {
 }
 
 const ctx = { sessionManager: { getBranch: () => branch(5) } } as any;
+
+/** Emit `count` user messages, then `turns` turn_end events. */
+async function feed(
+  handlers: Map<string, Handler>,
+  count: number,
+  turns: number,
+  toolResultsPerTurn = 0,
+): Promise<void> {
+  for (let i = 0; i < count; i++) {
+    await handlers.get("message_end")!({ message: { role: "user", content: `u${i}` } }, ctx);
+  }
+  for (let i = 0; i < turns; i++) {
+    const toolResults = Array.from({ length: toolResultsPerTurn }, (_, j) => ({ role: "toolResult", toolCallId: `${i}-${j}` }));
+    await handlers.get("turn_end")!({ toolResults }, ctx);
+  }
+}
+
+/** Disable the 3-user-message guard for tests that isolate the turn counter. */
+const NO_GUARD = { minUserTurnsBeforeReview: 0 } as const;
 
 const roots: string[] = [];
 function tempStore(): MemoryStore {
@@ -65,12 +89,9 @@ describe("scoped review/flush via injected completion", () => {
       assert.match(req.systemPrompt, /review/i);
       return { text: plan, ok: true };
     };
-    setupScopedReviewFlush(pi, { store, complete, reviewEveryTurns: 2 });
+    setupScopedReviewFlush(pi, { store, complete, reviewEveryTurns: 2, nudgeMode: "turn", ...NO_GUARD });
 
-    for (let i = 0; i < 2; i++) {
-      await handlers.get("message_end")!({ message: { role: "user" } }, ctx);
-    }
-    await handlers.get("turn_end")!({}, ctx);
+    await feed(handlers, 0, 2);
 
     assert.equal(called, 1);
     assert.match(store.getUserEntries().join("\n"), /concise replies/);
@@ -80,10 +101,9 @@ describe("scoped review/flush via injected completion", () => {
     const { pi, handlers } = mount();
     let called = 0;
     const complete: MemoryCompletion = async () => { called++; return { text: "{}", ok: true }; };
-    setupScopedReviewFlush(pi, { store: tempStore(), complete, reviewEveryTurns: 3 });
+    setupScopedReviewFlush(pi, { store: tempStore(), complete, reviewEveryTurns: 3, nudgeMode: "turn", ...NO_GUARD });
 
-    await handlers.get("message_end")!({ message: { role: "user" } }, ctx);
-    await handlers.get("turn_end")!({}, ctx);
+    await feed(handlers, 0, 1);
 
     assert.equal(called, 0);
   });
@@ -94,12 +114,11 @@ describe("scoped review/flush via injected completion", () => {
     const gate = new Promise<void>((r) => { release = r; });
     let called = 0;
     const complete: MemoryCompletion = async () => { called++; await gate; return { text: "{}", ok: true }; };
-    setupScopedReviewFlush(pi, { store: tempStore(), complete, reviewEveryTurns: 1 });
+    setupScopedReviewFlush(pi, { store: tempStore(), complete, reviewEveryTurns: 1, nudgeMode: "turn", ...NO_GUARD });
 
-    await handlers.get("message_end")!({ message: { role: "user" } }, ctx);
-    const first = handlers.get("turn_end")!({}, ctx);
+    const first = handlers.get("turn_end")!({ toolResults: [] }, ctx);
     // While the first review is suspended, another turn must not start a second.
-    await handlers.get("turn_end")!({}, ctx);
+    await handlers.get("turn_end")!({ toolResults: [] }, ctx);
     release();
     await first;
 
@@ -116,9 +135,10 @@ describe("scoped review/flush via injected completion", () => {
       assert.match(req.systemPrompt, /compress|session/i);
       return { text: plan, ok: true };
     };
-    setupScopedReviewFlush(pi, { store, complete, reviewEveryTurns: 99 });
+    setupScopedReviewFlush(pi, { store, complete, reviewEveryTurns: 99, nudgeMode: "turn", ...NO_GUARD });
 
-    await handlers.get("message_end")!({ message: { role: "user" } }, ctx);
+    // One turn, below the review threshold, so shutdown is what flushes.
+    await feed(handlers, 0, 1);
     await handlers.get("session_shutdown")!({}, ctx);
     await handlers.get("session_shutdown")!({}, ctx); // idempotent
 
@@ -130,10 +150,9 @@ describe("scoped review/flush via injected completion", () => {
     const { pi, handlers } = mount();
     const store = tempStore();
     const complete: MemoryCompletion = async () => ({ text: "", ok: false, error: "model down" });
-    setupScopedReviewFlush(pi, { store, complete, reviewEveryTurns: 1 });
+    setupScopedReviewFlush(pi, { store, complete, reviewEveryTurns: 1, nudgeMode: "turn", ...NO_GUARD });
 
-    await handlers.get("message_end")!({ message: { role: "user" } }, ctx);
-    await handlers.get("turn_end")!({}, ctx); // must not reject
+    await feed(handlers, 0, 1); // must not reject
     await handlers.get("session_shutdown")!({}, ctx); // must not reject
 
     assert.match(store.getUserEntries().join("\n"), /^$/);
@@ -144,10 +163,10 @@ describe("scoped review/flush via injected completion", () => {
     const emptyCtx = { sessionManager: { getBranch: () => [] } } as any;
     let called = 0;
     const complete: MemoryCompletion = async () => { called++; return { text: "{}", ok: true }; };
-    setupScopedReviewFlush(pi, { store: tempStore(), complete, reviewEveryTurns: 1 });
+    setupScopedReviewFlush(pi, { store: tempStore(), complete, reviewEveryTurns: 1, nudgeMode: "turn", ...NO_GUARD });
 
     await handlers.get("message_end")!({ message: { role: "user" } }, emptyCtx);
-    await handlers.get("turn_end")!({}, emptyCtx);
+    await handlers.get("turn_end")!({ toolResults: [] }, emptyCtx);
 
     assert.equal(called, 0);
   });

@@ -527,8 +527,18 @@
       "path": "src/scoped/review-flush.ts",
       "status": "applied",
       "surface": "background review/flush",
-      "change": "turn-triggered review and shutdown flush via injected completion; uses the shared BackgroundGate so review/flush never overlap a correction",
-      "reason": "same least-privilege completion contract; candidate #5 de-duplication",
+      "change": "turn-triggered review and shutdown flush via injected completion; reads MemoryConfig (nudgeInterval/nudgeToolCalls/reviewRecentMessages/reviewEnabled) instead of a hardcoded 6; counts turn_end + toolResults; additive nudgeMode/minUserTurnsBeforeReview; uses the shared BackgroundGate",
+      "reason": "same least-privilege completion contract; candidates #5 (gate), #6/#21/#22 (config + tool-call trigger). Design: docs/fork/P4-TUNING-DESIGN.md",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "tests/scoped/tuning.test.ts",
+      "status": "applied",
+      "surface": "fork-owned coverage",
+      "change": "config-driven thresholds, reviewEnabled, prompt bound, nudgeMode variants, minUserTurns guard, and Chain B wiring through the entry mount",
+      "reason": "candidates #6/#21/#22 need their own contract tests; test 10 fails if the entry forgets to pass the additive knobs",
       "risk": "new",
       "anchors": [],
       "baseBlob": null

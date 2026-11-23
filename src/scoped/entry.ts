@@ -36,7 +36,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { defaultMemoryConfig } from "../config.js";
 import { consolidateViaCompletion } from "./consolidation.js";
-import { setupScopedReviewFlush } from "./review-flush.js";
+import { setupScopedReviewFlush, type NudgeMode } from "./review-flush.js";
 import { setupScopedCorrectionDetector } from "./correction.js";
 import { createBackgroundGate } from "./background-gate.js";
 import type { MemoryCompletion } from "./completion-types.js";
@@ -62,9 +62,40 @@ import {
   type ScopedTelemetry,
 } from "./observability.js";
 
+/**
+ * Host-supplied policy knobs.
+ *
+ * Two transports, and only one of them is `MemoryConfig` (design record
+ * `docs/fork/P4-TUNING-DESIGN.md` §4.2.1):
+ *
+ * - Fields with a `MemoryConfig` counterpart (`reviewEveryTurns`,
+ *   `nudgeToolCalls`, `recentMessages`) are folded into `config` below.
+ * - `nudgeMode` and `minUserTurnsBeforeReview` have no config field; they are
+ *   additive and MUST be passed explicitly where review-flush is mounted.
+ *   Folding them into `config` would silently drop them.
+ */
+export interface ScopedMemoryTuning {
+  /** `"turn" | "tool" | "either"`. Default `"either"` (upstream semantics). */
+  readonly nudgeMode?: NudgeMode;
+  /** Minimum user messages before any review. Default 3. */
+  readonly minUserTurnsBeforeReview?: number;
+  /** Turns between reviews; maps to `config.nudgeInterval`. */
+  readonly reviewEveryTurns?: number;
+  /** Tool calls that also trigger a review; maps to `config.nudgeToolCalls`. */
+  readonly nudgeToolCalls?: number;
+  /** Recent messages in the review prompt; maps to `config.reviewRecentMessages`. */
+  readonly recentMessages?: number;
+}
+
 export interface ScopedHermesOptions extends ScopedRootInput {
   /** Overrides spread on top of `defaultMemoryConfig()`. Never read from disk. */
   readonly config?: Partial<MemoryConfig>;
+  /**
+   * Host-supplied policy knobs. Config-mapped fields merge into `config`;
+   * additive fields (`nudgeMode`, `minUserTurnsBeforeReview`) are passed
+   * explicitly to the review/flush mount.
+   */
+  readonly tuning?: ScopedMemoryTuning;
   /** Inject the memory policy prompt on `before_agent_start`. Default: true. */
   readonly injectPrompt?: boolean;
   /**
@@ -157,9 +188,16 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
     telemetry,
   });
 
+  const tuning = options.tuning;
   const config: MemoryConfig = {
     ...defaultMemoryConfig(),
     ...options.config,
+    // Chain A: only fields that exist on MemoryConfig are folded here. The
+    // additive knobs (nudgeMode, minUserTurnsBeforeReview) are NOT config
+    // fields and are passed explicitly at the mount site — see Chain B there.
+    ...(tuning?.reviewEveryTurns !== undefined ? { nudgeInterval: tuning.reviewEveryTurns } : {}),
+    ...(tuning?.nudgeToolCalls !== undefined ? { nudgeToolCalls: tuning.nudgeToolCalls } : {}),
+    ...(tuning?.recentMessages !== undefined ? { reviewRecentMessages: tuning.recentMessages } : {}),
     // The injected root wins over any `memoryDir` in `options.config`: allowing
     // both would let a caller misconfigure one tenant into another's directory.
     memoryDir: layout.memoryDir,
@@ -347,7 +385,17 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
         // Correction detection shares the gate with them: all three can fire
         // around turn_end, and only one may apply memory operations at a time.
         const backgroundGate = createBackgroundGate();
-        setupScopedReviewFlush(pi, { store, complete, gate: backgroundGate });
+        setupScopedReviewFlush(pi, {
+          store,
+          complete,
+          gate: backgroundGate,
+          // Chain A: thresholds travel inside `config`.
+          config,
+          // Chain B: additive knobs have no config counterpart; passing them any
+          // other way silently drops them (P4-TUNING-DESIGN.md §4.2.1).
+          nudgeMode: tuning?.nudgeMode,
+          minUserTurnsBeforeReview: tuning?.minUserTurnsBeforeReview,
+        });
         setupScopedCorrectionDetector(pi, { store, complete, config, gate: backgroundGate });
       }
     },
