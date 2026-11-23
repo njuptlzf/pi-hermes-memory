@@ -584,6 +584,26 @@
       "baseBlob": null
     },
     {
+      "path": "src/scoped/prompt-blocks.ts",
+      "status": "applied",
+      "surface": "scoped prompt injection",
+      "change": "replaceOwnedBlocks strips the provider's own policy/profile/standing tags before appending a fresh section, making selfInjects:false injection idempotent and stale-free (D1)",
+      "reason": "P5 PR-A: host pre-injects promptSection() and the entry hook also appends it; without a strip the block is duplicated and a mid-session profile correction leaves a stale copy",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "tests/scoped/prompt-blocks.test.ts",
+      "status": "applied",
+      "surface": "fork-owned coverage",
+      "change": "D1 idempotence across both pi branches, stale-profile removal, foreign-text survival, second-pass idempotence; R8 reviewEnabled port gap (off/on through open())",
+      "reason": "P5 PR-A: tests 9-13 of the design record plus the folded-in reviewEnabled switch need contract coverage",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
       "path": "tests/eval/memory-quality.test.ts",
       "status": "applied",
       "surface": "eval set",
