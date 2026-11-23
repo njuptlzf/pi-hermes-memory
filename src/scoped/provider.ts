@@ -25,7 +25,7 @@ import {
 } from "./observability.js";
 
 /** Must equal package.json `version`; a test asserts it, so a release cannot drift. */
-export const PROVIDER_VERSION = "0.11.0-scoped.6";
+export const PROVIDER_VERSION = "0.11.0-scoped.7";
 
 export const PROVIDER_ID = "hermes-scoped";
 
