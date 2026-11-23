@@ -1,13 +1,15 @@
 # P4 tuning design — scoped review policy (#6 / #21 / #22)
 
-> **Status: proposal.** Not implemented yet. This record is written before the
-> code so the reasoning is reviewable on its own, following the precedent of
-> `docs/fork/P2-OBSERVABILITY-DESIGN.md`.
+> **Status: shipped.** Implemented in commit `64cd912`, merged in PR #19 on
+> 2026-11-23. This is an **as-implemented** design record, following the
+> precedent of `docs/fork/P2-OBSERVABILITY-DESIGN.md`. Full suite green at
+> merge: 72 test files, `upstream:check:ci` 61/0, zero upstream engine files
+> touched.
 >
 > Candidates covered, from `docs/fork/TASKS.md`: **#21** (provider option
 > passthrough), **#22** (review/flush config surface), **#6** (tool-call-aware
-> review nudge). They ship as one slice because #6 has no meaning without the
-> knobs from #21/#22.
+> review nudge). They shipped as one slice because #6 has no meaning without
+> the knobs from #21/#22.
 
 ## 1. Problem
 
@@ -223,19 +225,30 @@ With the above, these become live:
 | `reviewRecentMessages` | `collectMessageParts` limit | **no** |
 
 `flushMinTurns` / `flushRecentMessages` are **not** wired in this slice: flush
-already runs at most once and only when `userTurns > 0`. Wiring them would add
-knobs with no observed need; noted as a non-goal rather than a silent gap.
+already runs at most once, only when `turnsSinceReview > 0` (no new turns since
+the last review), and only when `reviewEnabled` is not false. Wiring them would
+add knobs with no observed need; noted as a non-goal rather than a silent gap.
 
 **Default-value decision for `reviewRecentMessages` (explicit):** scoped
 currently uses `options.recentMessages ?? 20`; upstream's
 `DEFAULT_REVIEW_RECENT_MESSAGES = 0`, and `applyRecentMessageLimit(parts, 0)`
 returns **all** parts. Making the config field live therefore moves the
 effective default from "last 20 messages" to "all messages". **Decision: align
-with upstream (0 = all).** Rationale: the standard in `UPSTREAM-MAPPING.md` §3.1
-forbids diverging on a performance assumption, and 20 was an unforced literal
-with no recorded justification. The cost consequence is recorded in §8 risk
-R2, and a host that wants the old bound can set `tuning.recentMessages: 20`.
-This is a deliberate behavior change, not an accidental one.
+with upstream (0 = all).** Rationale, reaffirmed at implementation review:
+
+1. 20 is exactly the class of divergence `UPSTREAM-MAPPING.md` §3.1 forbids —
+   a hand-copied literal with no recorded justification, kept alive by a
+   performance assumption nobody measured.
+2. Upstream already bounds prompt size elsewhere, so "all messages" is not
+   "unbounded tokens": `getMessageText()` truncates each message, and session
+   compaction caps history depth. Upstream ships 0 as its weighed default.
+3. The correct cost lever is host configuration, which is precisely what
+   #21's `tuning` passthrough provides. A host that measures a cost problem
+   sets `tuning.recentMessages: 20`; the fork does not pre-pay for a
+   hypothetical by choosing a default upstream has no counterpart for.
+
+The cost consequence is recorded in §8 risk R2. This is a deliberate behavior
+change, not an accidental one.
 
 ### 4.4.1 Callers of changed signatures
 
