@@ -29,6 +29,8 @@ capability flag are recorded inline.
 | Host completion contract consumed end to end | agent-chat `v0.8.0` | agent-chat PR #6 merged/published 2026-11-20; `complete` now injected into scoped entry |
 | **Correction detection (candidate #5)** | — | `src/scoped/correction.ts`: `isCorrection` + injected `complete` via `runMemoryOps`, failure-memory capture, no subprocess/project/UI; shares a `BackgroundGate` with review/flush |
 | **Review tuning (#6 + #21 + #22)** | — | Read `MemoryConfig` instead of the `?? 6` literal; `turn_end` counts `toolResults`; `nudgeMode` + `minUserTurnsBeforeReview` additive in fork-owned types; `ProviderContext.tuning` passthrough. Design `docs/fork/P4-TUNING-DESIGN.md`, tests `tests/scoped/tuning.test.ts` |
+| **P5 PR-A — D1 duplicate injection + R8 `reviewEnabled` port gap** | PR #21, `344f412` | `src/scoped/prompt-blocks.ts` strips our own policy/profile/standing tags before appending the fresh section, in both pi branches; `tuning.reviewEnabled` folds into config (Chain A). Tests `tests/scoped/prompt-blocks.test.ts` (7 cases). No pin code. |
+| **Standing instructions (candidate #8, P5 PR-B)** | PR #22, `feb9596` | `layout.standingFile` absolute beside `USER.md` (profile dir, scope fallback); `StandingInstructions` built iff enabled, lazy-loaded once, rendered last in `promptSection()`; `tuning.standingInstructions` → config. Prompt only — no write surface. Design `docs/fork/P5-STANDING-DESIGN.md`, tests `tests/scoped/standing.test.ts` (8 cases) |
 
 Official npm state (verified 2026-11-20): `latest = 0.11.0-scoped.1` (untouched), `next = 0.11.0-scoped.6`.
 agent-chat packages are at `v0.8.0` across protocol/server/web (separate repo).
@@ -167,7 +169,7 @@ but it is not scheduled; "延后" means an external prerequisite is missing;
 | 5 | **DONE 2026-11-22** | `src/scoped/correction.ts`: `isCorrection` (pure, reused) + injected `complete` via `runMemoryOps`; failure-memory capture; no subprocess/project/UI. De-duplication via `BackgroundGate` shared with review/flush — all three use one slot. |
 | 6 | **DONE 2026-11-23** | `turn_end` counts `event.toolResults.length`; `nudgeMode` (`turn`/`tool`/`either`, default `either`) in fork-owned `ScopedReviewFlushOptions`; no UI notification. **Design: `docs/fork/P4-TUNING-DESIGN.md`**, tests `tests/scoped/tuning.test.ts` |
 | 7 | 不做 | The tenant root is the scope; a project axis would reintroduce the shared dimension the host deliberately removed. |
-| 8 | 采纳（设计已评审 2026-11-23，待实现；D1 先单独成 PR-A） | **What it buys:** a short list of user-pinned rules injected into **every** request and marked as the user's own directive, so it holds without being asked. Nothing else in the tenant can do that: `MEMORY.md` is recalled only if the model chooses to search (fatal for prohibitions), auto-retrieval labels results "context, not instructions" and demotes them (`policy.ts:52-54`), and review/flush summarise after the fact. Measured: the retrieval router is English-only, so `我们之前是怎么处理 migrations 的` and 5/5 similar Chinese prompts do **not** trigger it — the automatic channel is effectively off for a Chinese-language host. **Scope:** point `StandingInstructions` at the file beside `USER.md` (`profileDir`, scope fallback) and render it from `promptSection()`; prompt only, no agent-authored writes (row #9 stays 不做). **Design: `docs/fork/P5-STANDING-DESIGN.md`** (2026-11-23), whose §0 states the feature, the gap, the benefit and the cost before any implementation detail. Three findings change the shape: `layout.standingFile` is a bare name and must be absolute; pins are **user-level**, beside `USER.md` (the first draft's scope-level answer was circular and was reversed at review); and the slice must first fix D1 — the section being injected twice on the host path. |
+| 8 | **DONE 2026-11-23** (PR #21 D1/R8 + PR #22 #8) | **What it buys:** a short list of user-pinned rules injected into **every** request and marked as the user's own directive, so it holds without being asked. Nothing else in the tenant can do that: `MEMORY.md` is recalled only if the model chooses to search (fatal for prohibitions), auto-retrieval labels results "context, not instructions" and demotes them (`policy.ts:52-54`), and review/flush summarise after the fact. Measured: the retrieval router is English-only, so `我们之前是怎么处理 migrations 的` and 5/5 similar Chinese prompts do **not** trigger it — the automatic channel is effectively off for a Chinese-language host. **Scope:** point `StandingInstructions` at the file beside `USER.md` (`profileDir`, scope fallback) and render it from `promptSection()`; prompt only, no agent-authored writes (row #9 stays 不做). **Design: `docs/fork/P5-STANDING-DESIGN.md`** (2026-11-23), whose §0 states the feature, the gap, the benefit and the cost before any implementation detail. Three findings change the shape: `layout.standingFile` is a bare name and must be absolute; pins are **user-level**, beside `USER.md` (the first draft's scope-level answer was circular and was reversed at review); and the slice must first fix D1 — the section being injected twice on the host path. |
 | 9 | 不做 | `registerCommand` is a no-op in rpc mode; if #8 lands, authoring belongs to a host/user-side surface, not an agent tool. |
 | 10 | 不做 | The host can read memory files or use existing search; a TUI command has no rpc value. |
 | 11 | 延后 | Depends on #1–#2; no skill store means no inventory to list. |
@@ -182,24 +184,23 @@ but it is not scheduled; "延后" means an external prerequisite is missing;
 | 20 | 不做 | Tenant roots are host-computed, so upstream legacy migration sources do not exist; mirror reconciliation is the repair path. |
 | 21 | **DONE 2026-11-23** | `ScopedMemoryTuning` on `ScopedHermesOptions` + `ProviderContext.tuning`; config-mapped fields fold into `MemoryConfig`, additive knobs (`nudgeMode`, `minUserTurnsBeforeReview`) are passed explicitly at the mount (design §4.2.1) |
 | 22 | **DONE 2026-11-23** | `reviewEnabled`, `nudgeInterval`, `nudgeToolCalls`, `reviewRecentMessages` are now read by scoped code (were dead). Default `reviewRecentMessages` aligned to upstream `0` = all messages; see design risk R2 |
-| 8 | **DESIGNED 2026-11-23 — awaiting review, not implemented** | `docs/fork/P5-STANDING-DESIGN.md`. Verdict unchanged (adopted); the record adds two measured findings that must land first or beside it: **D1** the scoped prompt section is injected **twice** on the agent-chat path (host `appendSystemPrompt` + the extension's own hook), and **D2** `layout.standingFile` is a bare name (`roots.ts:132`), so any direct store construction would read one `./STANDING.md` shared by every tenant. Fix scope: absolute path under `memoryDir`, lazy load, block rendered last, **no write surface mounted** (row #9 stays 不做) |
+| 8 | **DONE 2026-11-23** | `docs/fork/P5-STANDING-DESIGN.md`. Both measured findings fixed: **D1** (section injected twice on the agent-chat path) in PR #21 via `src/scoped/prompt-blocks.ts`; **D2** (`layout.standingFile` was a bare name) in PR #22 — now absolute at the **user level** beside `USER.md` (`profileDir`, scope fallback), lazy-loaded, rendered last, **no write surface mounted** (row #9 stays 不做). 8 wiring tests in `tests/scoped/standing.test.ts` |
 
 Summary: **5 采纳**（#5, #6, #8, #21, #22）, **7 延后**（#1, #2, #3, #4, #11, #12, #18）,
 **10 不做**（#7, #9, #10, #13, #14, #15, #16, #17, #19, #20）. If work starts, take
 adopted rows in numeric order; #21/#22 travel with #6.
-**Done so far: #5, #6, #21, #22** (2026-11-22 / 2026-11-23). The only adopted
-row still open is **#8 — standing instructions**: designed and **reviewed
-2026-11-23** in `docs/fork/P5-STANDING-DESIGN.md`, **not implemented**. Its review
-points are settled there (§9): the duplicate-injection fix **D1 ships as PR-A**,
-**with R8's `reviewEnabled` port gap folded into it** (same defect class: a policy
-switch a provider-loaded host cannot reach); the enable switch stays in
-`ScopedMemoryTuning` because upstream's `standingInstructionsEnabled` is
-config-file-bound and therefore unreachable from a multi-tenant host; and pins
-are **`user`-level**, beside `USER.md`, following that person across their scopes.
-The first draft had said scope-level; the review question "what does a rule pinned
-*for this course* even mean?" exposed that argument as circular, and upstream's
-own placement (`STANDING.md` next to `USER.md` in `globalDir`) settled it. Deferred
-and rejected rows are unchanged.
+**Done so far: #5, #6, #8, #21, #22 — all 5 adopted rows complete**
+(2026-11-22 / 2026-11-23). #8 landed in two PRs per the design's §9 split:
+**PR #21** fixed D1 (the section was injected twice on the agent-chat path) and
+folded in R8's `reviewEnabled` port gap — same defect class, a policy switch a
+provider-loaded host could not reach; **PR #22** wired user-level standing
+instructions. The enable switch lives in `ScopedMemoryTuning` because upstream's
+`standingInstructionsEnabled` is config-file-bound and unreachable from a
+multi-tenant host; pins are **`user`-level**, beside `USER.md`, following that
+person across their scopes. The first draft had said scope-level; the review
+question "what does a rule pinned *for this course* even mean?" exposed that
+argument as circular, and upstream's own placement (`STANDING.md` next to
+`USER.md` in `globalDir`) settled it. Deferred and rejected rows are unchanged.
 
 ## P3 — CI auto-publish (deferred; lowest priority, after the 22 candidates)
 
