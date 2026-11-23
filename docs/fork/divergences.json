@@ -604,6 +604,16 @@
       "baseBlob": null
     },
     {
+      "path": "tests/scoped/standing.test.ts",
+      "status": "applied",
+      "surface": "fork-owned coverage",
+      "change": "P5 #8 wiring tests 1-8: absolute user-level path beside USER.md, block rendered last, user-level sharing/isolation, enable switch, empty-file byte identity, upstream budget cap, read through the entry, no write surface",
+      "reason": "candidate #8 needs contract coverage driven through the entry, not the store directly",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
       "path": "tests/eval/memory-quality.test.ts",
       "status": "applied",
       "surface": "eval set",

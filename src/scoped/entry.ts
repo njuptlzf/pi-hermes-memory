@@ -43,6 +43,7 @@ import type { MemoryCompletion } from "./completion-types.js";
 import { AtomicLockCoordinator } from "../store/atomic-lock-coordinator.js";
 import { DatabaseManager } from "../store/db.js";
 import { MemoryStore } from "../store/memory-store.js";
+import { StandingInstructions } from "../store/standing-instructions.js";
 import {
   reconcileMarkdownFailureScopes,
   reconcileMarkdownMemoryScope,
@@ -93,6 +94,13 @@ export interface ScopedMemoryTuning {
    * but `ProviderContext` has no `config` passthrough (P5 §8 R8 / PR-A).
    */
   readonly reviewEnabled?: boolean;
+  /**
+   * Inject this user's pinned `STANDING.md` into every prompt section.
+   * Maps to `config.standingInstructionsEnabled`; upstream default true
+   * (P5 §4.2). The switch lives here because upstream's config file is
+   * AGENT_ROOT-bound and unreachable from a multi-tenant host.
+   */
+  readonly standingInstructions?: boolean;
 }
 
 export interface ScopedHermesOptions extends ScopedRootInput {
@@ -209,6 +217,10 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
     // Chain A: reviewEnabled is a real MemoryConfig field, so it folds here.
     // Chain B's additive knobs are passed to setupScopedReviewFlush below.
     ...(tuning?.reviewEnabled !== undefined ? { reviewEnabled: tuning.reviewEnabled } : {}),
+    // Chain A: standingInstructions maps to a config field; do NOT also pass
+    // it at a mount site (contrast P4 §4.2.1 Chain B).
+    ...(tuning?.standingInstructions !== undefined
+      ? { standingInstructionsEnabled: tuning.standingInstructions } : {}),
     // The injected root wins over any `memoryDir` in `options.config`: allowing
     // both would let a caller misconfigure one tenant into another's directory.
     memoryDir: layout.memoryDir,
@@ -221,6 +233,31 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
   const store = profileStore === null
     ? scopeStore
     : createLayeredStore({ scopeStore, profileStore });
+
+  // P5 #8: user-pinned directives, read-only from the agent's side. The store
+  // is created iff the switch is on; its only consumer is promptSection(), so
+  // no tool, hook or provider handle can write the always-injected block.
+  // Only the user's editor (or the host) can put text into layout.standingFile.
+  const standingStore = config.standingInstructionsEnabled === false
+    ? null
+    : new StandingInstructions(layout.standingFile);
+
+  // Loaded lazily on first render and memoised: loading at open() would miss
+  // pins a host writes between open() and prompt assembly; reloading per turn
+  // would cost an fs read every turn. Mid-session edits take effect at the next
+  // open() (P5 §8 R5, matching upstream's once-per-session_start load).
+  let standingLoad: Promise<void> | null = null;
+  const ensureStanding = (): Promise<void> => {
+    if (standingStore === null) return Promise.resolve();
+    standingLoad ??= standingStore.load().catch((error: unknown) => {
+      // An unreadable pins file must never fail prompt assembly (the session
+      // would not open at all). Same best-effort shape as `ready` above.
+      queueMicrotask(() => {
+        console.error("[scoped-hermes] standing instructions load failed:", error);
+      });
+    });
+    return standingLoad;
+  };
 
   // The FTS5 search mirror is a per-tenant SQLite file living next to this
   // scope's Markdown. It is NOT shared with other scopes of the same user:
@@ -299,6 +336,7 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
 
   const promptSection = async (): Promise<string> => {
     await ready;
+    await ensureStanding();
     const policy = buildScopedMemoryPolicy({
       // A flag may only be true when the matching tool is actually mounted in
       // mount() below — a prompt that promises an absent tool wastes model turns.
@@ -312,7 +350,14 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
       hasProjectStore: false,
       hasSharedProfile: profileStore !== null,
     });
-    return [policy, profileSection()].filter(Boolean).join("\n\n");
+    // Order matches upstream (prompt-context.ts:65-70): policy, profile, then
+    // the user's own directives last, so they read as the operative instruction
+    // rather than recalled context. An empty STANDING.md filters out entirely
+    // (standing-instructions.ts:156-158), so an unchanged tenant's text is
+    // byte-identical.
+    return [policy, profileSection(), standingStore?.formatForSystemPrompt() ?? ""]
+      .filter(Boolean)
+      .join("\n\n");
   };
 
   const releaseLock = (root: string): void => {

@@ -14,6 +14,7 @@
  */
 
 import * as path from "node:path";
+import { STANDING_FILE } from "../constants.js";
 
 export interface ScopedRootInput {
   /**
@@ -124,12 +125,18 @@ export function resolveScopedRoots(input: ScopedRootInput): ScopedRoots {
  */
 export function scopedLayout(roots: ScopedRoots): ScopedLayout {
   const memoryDir = path.join(roots.storageRoot, "memory");
+  const profileDir = roots.sharedRoot === null ? null : path.join(roots.sharedRoot, "profile");
   return {
     memoryDir,
     skillsDir: path.join(memoryDir, "skills"),
     projectsRoot: path.join(memoryDir, "projects"),
-    profileDir: roots.sharedRoot === null ? null : path.join(roots.sharedRoot, "profile"),
-    standingFile: "STANDING.md",
+    profileDir,
+    // Pins are "how this user wants the assistant to answer", so they live
+    // beside USER.md at the user level, not per qualification. With no shared
+    // profile they fall back to this scope's memory dir — the same fallback
+    // layered-store.ts:29 uses for `user` writes. A bare name here would
+    // resolve against process.cwd() and be shared by every tenant (P5 §4.1).
+    standingFile: path.join(profileDir ?? memoryDir, STANDING_FILE),
     sessionsDbPath: roots.runtimeRoot === null ? null : path.join(roots.runtimeRoot, "sessions"),
   };
 }
