@@ -239,6 +239,16 @@
       "baseBlob": null
     },
     {
+      "path": "docs/fork/P5-STANDING-DESIGN.md",
+      "status": "applied",
+      "surface": "fork documentation",
+      "change": "Reviewed P5 design record for candidate #8: user-level STANDING.md beside USER.md (scope fallback), lazy load, block rendered last, no writer mounted; plus D1 (duplicate prompt-section injection) and R8 (reviewEnabled unreachable from the port) folded into PR-A",
+      "reason": "Fork-owned file; never conflicts on merge. Records measured findings (a bare standingFile resolves to process.cwd(); the section is injected twice on the host path; pins at the user level follow one person across their scopes) and the corrected placement argument, so implementation is reviewable against evidence rather than intent.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
       "path": "docs/fork/divergences.json",
       "status": "applied",
       "surface": "fork registry",
