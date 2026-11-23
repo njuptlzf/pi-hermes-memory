@@ -763,11 +763,14 @@ store directly, so a wiring regression fails.
    `open()`, then asserts through `promptSection()`; a design that only adds the
    field but forgets the `promptSection()` line fails here and passes 1-6 (the
    P4 §7 test-10 pattern: assert through the mount, not the handler).
-8. **No writer is reachable** — after mounting, the registered tool names are
-   exactly `memory_add` + `memory_search` (the two `registerMemoryTool` /
-   `registerMemorySearchTool` calls at `entry.ts:360-361`) and no command is
-   registered; the file's bytes are unchanged after a full turn. Pins the
-   non-goal structurally rather than by prose.
+8. **No writer is reachable** — after mounting, no pin/standing write tool or
+   command is registered, and the file's bytes are unchanged after a full turn.
+   Pins the non-goal structurally rather than by prose. Assert the *invariant*
+   (no `/pin|standing/i` tool name; bytes identical), not an exact tool list:
+   `registerMemoryTool` mounts `memory_add` / `memory_remove` / `memory_replace`
+   and `registerMemorySearchTool` mounts `memory_search` (`entry.ts:360-361`),
+   so "exactly two tools" is a false expectation that would fail on the current
+   tree. The implemented assertion lives in `tests/scoped/standing.test.ts`.
 
 `tests/scoped/prompt-blocks.test.ts` (D1):
 
