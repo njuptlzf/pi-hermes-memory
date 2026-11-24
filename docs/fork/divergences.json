@@ -249,6 +249,16 @@
       "baseBlob": null
     },
     {
+      "path": "docs/fork/SESSION-SEARCH-DESIGN.md",
+      "status": "applied",
+      "surface": "fork documentation",
+      "change": "Design record for #3: mount scoped session_search against the tenant's existing session FTS tables and index the current session via ctx.sessionManager / indexCurrentSession; anchors variant and cross-session host history port explicitly deferred",
+      "reason": "Fork-owned file; never conflicts on merge. Written before implementation per UPSTREAM-MAPPING.md section 3.2; records the indexLiveSession no-op trap with agent-chat in-memory sessions and the host's missing tuning field so the implementation cannot reintroduce either.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
       "path": "docs/fork/divergences.json",
       "status": "applied",
       "surface": "fork registry",
