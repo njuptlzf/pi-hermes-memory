@@ -39,6 +39,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { Type } from "typebox";
 import { StringEnum } from "@earendil-works/pi-ai";
 import { isDatabaseClosedError, type DatabaseManager } from "../store/db.js";
+import type { MemoryHistoryPort } from "./history-types.js";
 import { getIndexedMessageCount, searchSessions } from "../store/session-search.js";
 import { indexCurrentSession } from "../store/session-indexer.js";
 import { createSharedToolResultRenderer } from "../tools/shared-output-view.js";
@@ -208,8 +209,18 @@ export function attachScopedSessionIndex(
   pi: ExtensionAPI,
   dbManager: DatabaseManager,
   isReady: Promise<void>,
+  onHeader?: (id: string | null) => void,
 ): void {
+  const noteHeader = (ctx: ExtensionContext): void => {
+    // The backfill reconcile must never delete the session that is live
+    // right now (SESSION-BACKFILL-DESIGN.md §2.4/B5). Before the first turn
+    // the id is null and nothing is protected.
+    const sm = ctx.sessionManager as { getHeader?: () => { id?: string } | null };
+    onHeader?.(typeof sm?.getHeader === "function" ? (sm.getHeader()?.id ?? null) : null);
+  };
+
   pi.on("turn_end", async (_event, ctx: ExtensionContext) => {
+    noteHeader(ctx);
     await isReady; // dbManager is open; memory mirrors are seeded first
     try {
       dbManager.withCorruptionRecovery(() => indexCurrentSession(dbManager, ctx.sessionManager));
@@ -219,6 +230,7 @@ export function attachScopedSessionIndex(
   });
 
   pi.on("session_shutdown", async (_event, ctx: ExtensionContext) => {
+    noteHeader(ctx);
     await isReady;
     try {
       dbManager.withCorruptionRecovery(() => indexCurrentSession(dbManager, ctx.sessionManager));
@@ -226,6 +238,126 @@ export function attachScopedSessionIndex(
       reportScopedIndexFailure(error);
     }
   });
+}
+
+/**
+ * Consume the host's read-only history port (SESSION-BACKFILL-DESIGN.md).
+ * Reuses the shipped live-index parser: `exportHistory` entries have the same
+ * shape as `SessionManager` accessors, so a two-closure snapshot is enough —
+ * no new parser, no file I/O, no upstream file touched.
+ */
+const BACKFILL_CURSOR_KEY = "scoped_session_backfill";
+/** Aligned to upstream's `maxFilesToIndex ?? 50` (`session-indexer.ts:457`). */
+const BACKFILL_SESSIONS_PER_OPEN = 50;
+
+type BackfillCursor = Record<string, string>;
+
+function readBackfillCursor(db: ReturnType<DatabaseManager["getDb"]>): BackfillCursor {
+  const row = db.prepare("SELECT value FROM extension_metadata WHERE key = ?")
+    .get(BACKFILL_CURSOR_KEY) as { value?: string } | undefined;
+  if (!row?.value) return {};
+  try {
+    const parsed: unknown = JSON.parse(row.value);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const out: BackfillCursor = {};
+      for (const [id, value] of Object.entries(parsed)) {
+        if (typeof value === "string") out[id] = value;
+      }
+      return out;
+    }
+  } catch { /* stale/corrupt cursor = fresh start; indexCurrentSession is idempotent */ }
+  return {};
+}
+
+function writeBackfillCursor(db: ReturnType<DatabaseManager["getDb"]>, cursor: BackfillCursor): void {
+  db.prepare(`
+    INSERT INTO extension_metadata (key, value) VALUES (?, ?)
+    ON CONFLICT(key) DO UPDATE SET value = excluded.value
+  `).run(BACKFILL_CURSOR_KEY, JSON.stringify(cursor));
+}
+
+function validHistoryHeader(entry: unknown): entry is { id: string; timestamp: string; cwd: string } {
+  if (!entry || typeof entry !== "object") return false;
+  const e = entry as { type?: unknown; id?: unknown; timestamp?: unknown; cwd?: unknown };
+  return e.type === "session"
+    && typeof e.id === "string" && e.id.length > 0
+    && typeof e.timestamp === "string" && e.timestamp.length > 0
+    && typeof e.cwd === "string" && e.cwd.length > 0;
+}
+
+/**
+ * One bounded backfill pass, callable directly by tests. A session is only
+ * loaded when its `updatedAt` changed; a failed/missing load leaves the cursor
+ * alone so the next open retries. Reconcile uses the port's authoritative
+ * id set — the current live session is unconditionally protected (B5).
+ */
+export async function backfillScopedHistoryOnce(
+  dbManager: DatabaseManager,
+  history: MemoryHistoryPort,
+  currentSessionId: () => string | null,
+  isDisposed: () => boolean = () => false,
+): Promise<void> {
+  const db = dbManager.getDb();
+  const cursor = readBackfillCursor(db);
+  const sessions = await history.list(); // failure propagates to start's catch
+  const listed = new Set(sessions.map((s) => s.sessionId));
+  let budget = 0;
+
+  for (const s of sessions) {
+    if (isDisposed()) return; // B4: no writes into a released handle
+    if (budget++ >= BACKFILL_SESSIONS_PER_OPEN) break;
+    if (cursor[s.sessionId] === s.updatedAt) continue;
+
+    const entries = await history.load(s.sessionId);
+    if (!entries) continue; // B6: undefined = not yet indexable, retry next open
+    const header = entries.find(validHistoryHeader);
+    if (!header) {
+      cursor[s.sessionId] = s.updatedAt; // don't retry junk every open
+      continue;
+    }
+    const snapshot = {
+      getHeader: () => header,
+      getEntries: () => entries.filter((e) => e !== header),
+    };
+    dbManager.withCorruptionRecovery(() =>
+      indexCurrentSession(dbManager, snapshot as Parameters<typeof indexCurrentSession>[1]));
+    cursor[s.sessionId] = s.updatedAt;
+  }
+
+  // Reconcile: only ids this port has backfilled are deletion candidates;
+  // live-indexed-only ids are structurally outside the cursor.
+  const liveId = currentSessionId();
+  const deleted = Object.keys(cursor).filter((id) => !listed.has(id) && id !== liveId);
+  if (deleted.length > 0) {
+    dbManager.withCorruptionRecovery(() => {
+      const d = dbManager.getDb();
+      for (let i = 0; i < deleted.length; i += 100) {
+        const chunk = deleted.slice(i, i + 100);
+        const marks = chunk.map(() => "?").join(",");
+        d.prepare(`DELETE FROM messages WHERE session_id IN (${marks})`).run(...chunk);
+        d.prepare(`DELETE FROM sessions WHERE id IN (${marks})`).run(...chunk);
+      }
+    });
+    for (const id of deleted) delete cursor[id];
+  }
+  writeBackfillCursor(dbManager.getDb(), cursor);
+}
+
+/**
+ * Fire-and-forget after `ready`, deliberately not awaited by mount/prompt.
+ * Real failures take the same best-effort channel as live indexing; a closed
+ * DB is teardown noise and is skipped there.
+ */
+export function startScopedHistoryBackfill(
+  dbManager: DatabaseManager,
+  history: MemoryHistoryPort,
+  isReady: Promise<void>,
+  currentSessionId: () => string | null,
+  isDisposed: () => boolean,
+): Promise<void> {
+  return isReady
+    .then(() => backfillScopedHistoryOnce(dbManager, history, currentSessionId, isDisposed))
+    .catch((error: unknown) => reportScopedIndexFailure(error));
 }
 
 /**
