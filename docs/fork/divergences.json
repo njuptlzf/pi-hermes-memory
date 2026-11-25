@@ -808,6 +808,26 @@
       "risk": "new",
       "anchors": [],
       "baseBlob": null
+    },
+    {
+      "path": "src/scoped/session-search.ts",
+      "status": "applied",
+      "surface": "session search (scoped #3)",
+      "change": "fork-owned tool wrapper + live turn/shutdown indexing; reuses upstream's pure searchSessions/getIndexedMessageCount/indexCurrentSession",
+      "reason": "upstream's session-search-tool.ts evaluates AGENT_ROOT at import time (paths.ts:5), which violates the scoped boundary; forced reimplementation per SESSION-SEARCH-DESIGN.md §1 item 3 / R1. Tool wording is scoped to the current session (§4.2).",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "tests/scoped/session-search.test.ts",
+      "status": "applied",
+      "surface": "session search (scoped #3) tests",
+      "change": "11 cases per SESSION-SEARCH-DESIGN.md §7: mount gating, index+search, idempotence, incremental, shutdown flush, tenant isolation, best-effort, failure reporting, no env at import, wording pins",
+      "reason": "fork-owned coverage for the #3 slice",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
     }
   ]
 }

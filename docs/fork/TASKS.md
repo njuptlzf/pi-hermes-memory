@@ -167,7 +167,7 @@ but it is not scheduled; "延后" means an external prerequisite is missing;
 | --- | --- | --- |
 | 1 | 延后 | `SkillStore` accepts an injected root, but the provider port has no skill-path exit and the host already owns discovery. Confirm a tenant-skill requirement before designing roots and registration. |
 | 2 | 延后 | Depends on #1; without a tenant skill root there is nothing to migrate or discover. |
-| 3 | 延后 | Needs a per-scope session source from the host. Reading the host-global sessions directory would leak across tenants. |
+| 3 | **DONE 2026-11-25** (current-session slice) | `src/scoped/session-search.ts`: forks only the tool wrapper (upstream's imports `AGENT_ROOT` at import time — forced), reuses `searchSessions`/`getIndexedMessageCount`/`indexCurrentSession`; indexes the **current** session via `turn_end` + `session_shutdown`. Tool wording pinned to current-session scope (§4.2, test 10). `tuning.sessionSearch` opt-out (default on; agent-chat never passes tuning). Cross-tenant history still needs the host history port (§9 follow-up) — that is the remaining half of the old "per-scope session source" verdict. **Design: `docs/fork/SESSION-SEARCH-DESIGN.md`**, tests `tests/scoped/session-search.test.ts` (11 cases) |
 | 4 | 延后 | Depends on #3; the whole index chain must use the same per-scope session source. |
 | 5 | **DONE 2026-11-22** | `src/scoped/correction.ts`: `isCorrection` (pure, reused) + injected `complete` via `runMemoryOps`; failure-memory capture; no subprocess/project/UI. De-duplication via `BackgroundGate` shared with review/flush — all three use one slot. |
 | 6 | **DONE 2026-11-23** | `turn_end` counts `event.toolResults.length`; `nudgeMode` (`turn`/`tool`/`either`, default `either`) in fork-owned `ScopedReviewFlushOptions`; no UI notification. **Design: `docs/fork/P4-TUNING-DESIGN.md`**, tests `tests/scoped/tuning.test.ts` |
@@ -193,7 +193,10 @@ Summary: **5 采纳**（#5, #6, #8, #21, #22）, **7 延后**（#1, #2, #3, #4, 
 **10 不做**（#7, #9, #10, #13, #14, #15, #16, #17, #19, #20）. If work starts, take
 adopted rows in numeric order; #21/#22 travel with #6.
 **Done so far: #5, #6, #8, #21, #22 — all 5 adopted rows complete**
-(2026-11-22 / 2026-11-23). #8 landed in two PRs per the design's §9 split:
+(2026-11-22 / 2026-11-23). **2026-11-25: #3 implemented as a partial slice**
+(current-session only, promoted from 延后 by the design record; cross-session
+recall still waits for the host history port, so the remaining 延后 count is
+6: #1, #2, #4, #11, #12, #18). #8 landed in two PRs per the design's §9 split:
 **PR #21** fixed D1 (the section was injected twice on the agent-chat path) and
 folded in R8's `reviewEnabled` port gap — same defect class, a policy switch a
 provider-loaded host could not reach; **PR #22** wired user-level standing

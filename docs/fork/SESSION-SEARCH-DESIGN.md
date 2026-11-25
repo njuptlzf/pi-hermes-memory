@@ -1,7 +1,9 @@
 # Session search design — scoped `session_search` (#3, current-session slice)
 
-> **Status: proposed, not implemented.** This is a design record under
-> `UPSTREAM-MAPPING.md` §3.2 — an implementation contract, not a sketch. It
+> **Status: implemented 2026-11-25** (this slice). The record below was the
+> pre-implementation contract (`UPSTREAM-MAPPING.md` §3.2); §6/§7 now match the
+> shipped code (`src/scoped/session-search.ts`, `tests/scoped/session-search.test.ts`).
+> It
 > covers backlog row **#3** (`session_search`) and the **minimum** indexing
 > needed to make that tool answer anything: live indexing of the *current*
 > session's messages.
@@ -435,7 +437,14 @@ but **no** `getSessionFile` (to pin the §3.1 trap):
 6. **Tenant isolation** — two tenants with the same query; each tool sees only
    its own DB rows (mirrors `tests/scoped/multi-tenant.test.ts`).
 7. **Best-effort** — a throwing `complete`-less path or a closed DB does not
-   propagate out of the event handler.
+   propagate out of the event handler. *As shipped:* the scoped entry installs
+   no `setOpenGuard`, so `getDb()` re-opens after `dispose()` and the closed
+   state cannot be produced through `entry.mount()` (that guard is upstream's
+   `src/index.ts` mechanism from #313). Test 7 drives the un-throwable paths
+   (null header, empty entries — resolve clean, no noise); test 7b pins the
+   `reportScopedIndexFailure` contract directly: closed-DB shape skipped,
+   other errors reach `console.error` via the microtask; test 11 runs a
+   throwing snapshot end-to-end through both handlers.
 8. **Chain is wired through the entry** — mount a handle with
    `tuning: { sessionSearch: false }` and confirm no tool is registered and
    `promptSection()` omits the sentence; mount with `true` (or omitted) and
