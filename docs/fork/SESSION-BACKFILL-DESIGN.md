@@ -1,7 +1,8 @@
 # Session backfill design — scoped history port consumption (#3 completion, #4 backfill piece)
 
-> **Status: proposed, not implemented.** Implementation contract per
-> `UPSTREAM-MAPPING.md` §3.2. Companion to
+> **Status: implemented** (this slice — fork PR following this record; host
+> port merged in agent-chat PR #17, squash `dcb07c3`). Implementation contract
+> per `UPSTREAM-MAPPING.md` §3.2. Companion to
 > `SESSION-SEARCH-DESIGN.md` (current-session slice, implemented in PRs
 > #29/#30): that record's §9 named the host history port as the follow-up that
 > makes #3 fully answer "what did we discuss last week". The port itself landed

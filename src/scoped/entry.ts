@@ -42,9 +42,10 @@ import { defaultMemoryConfig } from "../config.js";
 import { consolidateViaCompletion } from "./consolidation.js";
 import { setupScopedReviewFlush, type NudgeMode } from "./review-flush.js";
 import { setupScopedCorrectionDetector } from "./correction.js";
-import { attachScopedSessionIndex, mountScopedSessionSearch } from "./session-search.js";
+import { attachScopedSessionIndex, mountScopedSessionSearch, startScopedHistoryBackfill } from "./session-search.js";
 import { createBackgroundGate } from "./background-gate.js";
 import type { MemoryCompletion } from "./completion-types.js";
+import type { MemoryHistoryPort } from "./history-types.js";
 import { AtomicLockCoordinator } from "../store/atomic-lock-coordinator.js";
 import { DatabaseManager, DATABASE_CLOSED_MESSAGE } from "../store/db.js";
 import { MemoryStore } from "../store/memory-store.js";
@@ -143,6 +144,12 @@ export interface ScopedHermesOptions extends ScopedRootInput {
    * is mounted; when absent, the tenant still reads/writes/searches normally.
    */
   readonly complete?: MemoryCompletion;
+  /**
+   * Read-only view of this scope's saved sessions (SESSION-BACKFILL-DESIGN.md).
+   * Optional: absent → no cross-session backfill, current-session indexing
+   * continues unchanged. No import from the host protocol — structural shim.
+   */
+  readonly history?: MemoryHistoryPort;
   /**
    * Pre-built telemetry from the provider boundary. When omitted the entry
    * creates its own, so direct `openScopedHermesMemory` users get metrics too.
@@ -347,6 +354,18 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
       });
     });
 
+  // Host history port (SESSION-BACKFILL-DESIGN.md): lazy, bounded, best-effort.
+  // Starts after `ready`, not from mount() — a direct user who only calls
+  // promptSection() still gets a backfilled mirror. `dbClosed` is set by both
+  // dispose() and erase(), so a teardown mid-pass stops cleanly.
+  let currentSessionId: string | null = null;
+  if (sessionSearchEnabled && options.history) {
+    void startScopedHistoryBackfill(
+      dbManager, options.history, ready,
+      () => currentSessionId, () => dbClosed,
+    );
+  }
+
   const profileSection = (): string => {
     if (profileStore === null) return "";
     const limit = options.profilePromptChars ?? 1200;
@@ -462,7 +481,7 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
       // same value, so prompt and mount can never diverge.
       if (sessionSearchEnabled) {
         mountScopedSessionSearch(observedPi, dbManager);
-        attachScopedSessionIndex(pi, dbManager, ready);
+        attachScopedSessionIndex(pi, dbManager, ready, (id) => { currentSessionId = id; });
       }
 
       // Per-turn automatic retrieval is opt-out, not opt-in: it is the host-side

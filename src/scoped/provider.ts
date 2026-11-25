@@ -17,6 +17,7 @@
 
 import { openScopedHermesMemory, type ScopedHermesHandle, type ScopedMemoryTuning } from "./entry.js";
 import type { MemoryCompletion } from "./completion-types.js";
+import type { MemoryHistoryPort } from "./history-types.js";
 import type { CompletionLimits } from "./completion-guard.js";
 import {
   createScopedTelemetry,
@@ -45,6 +46,11 @@ interface ProviderContext {
    * path is unaffected. Structurally matches the host's MemoryCompletion.
    */
   readonly complete?: MemoryCompletion;
+  /**
+   * Read-only view of this scope's saved sessions (agent-chat PR #17).
+   * Optional: a host without it still gets current-session indexing.
+   */
+  readonly history?: MemoryHistoryPort;
   /** Host correlation id propagated to every metric event. Optional. */
   readonly traceId?: string;
   /** Per-event metric sink. Must never throw into the host. Optional. */
@@ -107,6 +113,8 @@ const provider: ScopedHermesProvider = {
         storageRoot: ctx.storageRoot,
         sharedRoot: ctx.sharedRoot ?? null,
         complete: ctx.complete,
+        // Host capability, structurally matched — no SDK import in this module.
+        history: ctx.history,
         telemetry,
         completionLimits: ctx.completionLimits,
         tuning: ctx.tuning,

@@ -193,10 +193,12 @@ Summary: **5 采纳**（#5, #6, #8, #21, #22）, **7 延后**（#1, #2, #3, #4, 
 **10 不做**（#7, #9, #10, #13, #14, #15, #16, #17, #19, #20）. If work starts, take
 adopted rows in numeric order; #21/#22 travel with #6.
 **Done so far: #5, #6, #8, #21, #22 — all 5 adopted rows complete**
-(2026-11-22 / 2026-11-23). **2026-11-25: #3 implemented as a partial slice**
-(current-session only, promoted from 延后 by the design record; cross-session
-recall still waits for the host history port, so the remaining 延后 count is
-6: #1, #2, #4, #11, #12, #18). #8 landed in two PRs per the design's §9 split:
+(2026-11-22 / 2026-11-23). #3 is now fully answered by the host history port (agent-chat PR #17,
+`dcb07c3`) plus the scoped backfill slice (`SESSION-BACKFILL-DESIGN.md`):
+`session_search` recalls previously saved sessions of this scope, not just the
+live one. The remaining 延后 count is 6: #1, #2, #4, #11, #12, #18 (#4 keeps
+its 延后 status for prune/retention, `session_files`, ephemeral cleanup and
+recovery maintenance — only its backfill half landed). #8 landed in two PRs per the design's §9 split:
 **PR #21** fixed D1 (the section was injected twice on the agent-chat path) and
 folded in R8's `reviewEnabled` port gap — same defect class, a policy switch a
 provider-loaded host could not reach; **PR #22** wired user-level standing

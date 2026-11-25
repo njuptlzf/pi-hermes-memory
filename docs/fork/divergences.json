@@ -838,6 +838,26 @@
       "risk": "new",
       "anchors": [],
       "baseBlob": null
+    },
+    {
+      "path": "src/scoped/history-types.ts",
+      "status": "applied",
+      "surface": "scoped history port shim",
+      "change": "Structural mirror of the host MemoryHistoryPort / MemorySessionSummary; the fork imports no host protocol package (completion-types.ts precedent)",
+      "reason": "Host-neutral adapter: TypeScript structural typing satisfies the agent-chat port (PR #17) without a compile-time dependency on the host SDK. Design: SESSION-BACKFILL-DESIGN.md §2.1.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "tests/scoped/session-backfill.test.ts",
+      "status": "applied",
+      "surface": "scoped history backfill tests",
+      "change": "10 cases per SESSION-BACKFILL-DESIGN.md §7: backfill+search, cursor skip, changed session, reconcile deletion, live-session protection, budget, no-port, host faults, dispose abort, header validity",
+      "reason": "fork-owned coverage for the #3 completion / #4 backfill slice",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
     }
   ]
 }
