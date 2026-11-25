@@ -4,12 +4,16 @@
  * What this is: the tenant-safe composition of hermes' memory core — one
  * `MemoryStore` per scope, a cross-scope profile store per user, one SQLite
  * FTS5 mirror per scope, the write tool, the `memory_search` read tool, a
- * policy prompt built from what is actually mounted, and — when the host
+ * policy prompt built from what is actually mounted, verbatim current-session
+ * recall (`session_search` + live turn indexing, `src/scoped/session-search.ts`),
+ * and — when the host
  * injects `complete` — correction detection (`src/scoped/correction.ts`) plus
  * background review and session flush (`src/scoped/review-flush.ts`), all three
  * sharing one background gate so their writes never overlap. What this is NOT: the full `src/index.ts`
- * surface. TUI commands and session search are excluded on purpose, and the
- * full entry's env-reading / child-process machinery is replaced by injected
+ * surface. TUI commands are excluded on purpose (inert under rpc), and
+ * session search is the current-session slice
+ * (`src/scoped/session-search.ts`), not upstream's file-scanning variant —
+ * the full entry's env-reading / child-process machinery is replaced by injected
  * parameters, for three reasons that are contract requirements of an
  * in-process host, not preferences:
  *
@@ -38,6 +42,7 @@ import { defaultMemoryConfig } from "../config.js";
 import { consolidateViaCompletion } from "./consolidation.js";
 import { setupScopedReviewFlush, type NudgeMode } from "./review-flush.js";
 import { setupScopedCorrectionDetector } from "./correction.js";
+import { attachScopedSessionIndex, mountScopedSessionSearch } from "./session-search.js";
 import { createBackgroundGate } from "./background-gate.js";
 import type { MemoryCompletion } from "./completion-types.js";
 import { AtomicLockCoordinator } from "../store/atomic-lock-coordinator.js";
@@ -101,6 +106,15 @@ export interface ScopedMemoryTuning {
    * AGENT_ROOT-bound and unreachable from a multi-tenant host.
    */
   readonly standingInstructions?: boolean;
+  /**
+   * Mount `session_search` and index the current session. Default true.
+   * Additive (SESSION-SEARCH-DESIGN.md §4.1): upstream's `SessionSearchConfig`
+   * has no enable bit — only `variant` — so this cannot fold into `config`
+   * (Chain B). The agent-chat host does not pass `tuning` today, so on that
+   * path the tool is always mounted; the switch is the opt-out for direct
+   * `openScopedHermesMemory` users and tests.
+   */
+  readonly sessionSearch?: boolean;
 }
 
 export interface ScopedHermesOptions extends ScopedRootInput {
@@ -205,6 +219,11 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
   });
 
   const tuning = options.tuning;
+  // session_search (SESSION-SEARCH-DESIGN.md §4.1): Chain-B additive — no
+  // MemoryConfig counterpart, read straight off tuning at the mount site.
+  // Default on; the only off path is an explicit `false` from a direct user
+  // (the agent-chat host never passes tuning).
+  const sessionSearchEnabled = tuning?.sessionSearch !== false;
   const config: MemoryConfig = {
     ...defaultMemoryConfig(),
     ...options.config,
@@ -345,7 +364,7 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
       // is skipped when the host owns the whole prompt (injectPrompt:false) —
       // claiming it then would promise a block that is never injected.
       hasAutoRetrieval: options.autoRetrieve !== false && options.injectPrompt !== false,
-      hasSessionSearch: false,
+      hasSessionSearch: sessionSearchEnabled,
       hasSkills: false,
       hasProjectStore: false,
       hasSharedProfile: profileStore !== null,
@@ -421,6 +440,16 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
       const observedPi = instrumentToolRegistration(pi, telemetry);
       registerMemoryTool(observedPi, store, () => null, dbManager);
       registerMemorySearchTool(observedPi, dbManager, { usageTrackingEnabled: config.usageHitTrackingEnabled });
+      // session_search + live indexing of the current session
+      // (SESSION-SEARCH-DESIGN.md §4.2): the tool registers through the
+      // metrics Proxy like the others; the index listeners attach to the raw
+      // `pi` because they are handlers, not tool registrations. Gated by the
+      // Chain-B flag above — hasSessionSearch in promptSection() reads the
+      // same value, so prompt and mount can never diverge.
+      if (sessionSearchEnabled) {
+        mountScopedSessionSearch(observedPi, dbManager);
+        attachScopedSessionIndex(pi, dbManager, ready);
+      }
 
       // Per-turn automatic retrieval is opt-out, not opt-in: it is the host-side
       // value of the v0.7 slice. It follows injectPrompt (a host that owns the

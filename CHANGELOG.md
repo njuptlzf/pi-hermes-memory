@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`session_search` (backlog #3, current-session slice)**: `src/scoped/session-search.ts` mounts a `session_search` tool on every scoped tenant and indexes the **current** session's messages into its per-scope SQLite mirror on `turn_end` (incremental) and `session_shutdown` (final flush) — verbatim recall of what was said in this conversation, which the compressed `MEMORY.md` + review summaries discard. The engine was already there (`sessions`/`messages`/`message_fts` are created by upstream `SCHEMA_SQL`; `searchSessions`/`getIndexedMessageCount`/`indexCurrentSession` are pure and reused). Only the ~100-line tool wrapper is restated fork-side, because upstream's `session-search-tool.ts` evaluates `AGENT_ROOT` at import time (`src/paths.ts:5`), violating the scoped boundary — a **forced** reimplementation (design §1 item 3, R1). The tool's wording is scoped to the current session and pinned by tests (design §4.2 "Wording is not part of the copy", test 10): it does not claim past-session recall (deferred to the §9 history port) or a slash command that is inert under rpc. `tuning.sessionSearch` opts out (default on — the agent-chat host never passes `tuning`); `hasSessionSearch` in the policy prompt now reads the same flag. **Design: `docs/fork/SESSION-SEARCH-DESIGN.md`** (added in PR #27, revised in #28), tests `tests/scoped/session-search.test.ts` (11 cases). No upstream file changes; `divergences.json` gains only the two new fork-owned rows.
+
 ## [0.11.0-scoped.7] - 2026-11-23
 
 Fork-only prerelease. Published as `@njuptlzf/pi-hermes-memory` under `next`.
