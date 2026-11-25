@@ -7,9 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0-scoped.8] - 2026-11-25
+
+Fork-only prerelease. Published as `@njuptlzf/pi-hermes-memory` under `next`.
+
 ### Added
 - **Cross-session recall via the host history port (backlog #3, completion of the current-session slice)**: with agent-chat's `MemoryHistoryPort` injected, the scoped adapter lists previously saved sessions of the scope on open, reloads only those whose `updatedAt` changed, indexes them into the same per-tenant `messages`/`message_fts` tables through upstream's shipped `indexSession` (no new parser), and reconciles rows for sessions no longer in the host's authoritative list. Bounded to 50 sessions per open (upstream's `maxFilesToIndex` default), lazy/best-effort, dispose-safe; the live session is protected from reconcile deletes. The port is optional — hosts without it keep the current-session behavior exactly. Design: `docs/fork/SESSION-BACKFILL-DESIGN.md`; host contract design in agent-chat `docs/design/记忆历史端口设计稿.md` (PR #17). Tests: `tests/scoped/session-backfill.test.ts` (10 cases).
 - **`session_search` (backlog #3, current-session slice)**: `src/scoped/session-search.ts` mounts a `session_search` tool on every scoped tenant and indexes the **current** session's messages into its per-scope SQLite mirror on `turn_end` (incremental) and `session_shutdown` (final flush) — verbatim recall of what was said in this conversation, which the compressed `MEMORY.md` + review summaries discard. The engine was already there (`sessions`/`messages`/`message_fts` are created by upstream `SCHEMA_SQL`; `searchSessions`/`getIndexedMessageCount`/`indexCurrentSession` are pure and reused). Only the ~100-line tool wrapper is restated fork-side, because upstream's `session-search-tool.ts` evaluates `AGENT_ROOT` at import time (`src/paths.ts:5`), violating the scoped boundary — a **forced** reimplementation (design §1 item 3, R1). The tool's wording is scoped to the current session and pinned by tests (design §4.2 "Wording is not part of the copy", test 10): it does not claim past-session recall (deferred to the §9 history port) or a slash command that is inert under rpc. `tuning.sessionSearch` opts out (default on — the agent-chat host never passes `tuning`); `hasSessionSearch` in the policy prompt now reads the same flag. **Design: `docs/fork/SESSION-SEARCH-DESIGN.md`** (added in PR #27, revised in #28), tests `tests/scoped/session-search.test.ts` (11 cases). No upstream file changes; `divergences.json` gains only the two new fork-owned rows.
+
+### Fixed
+- **Tenant DB open guard after teardown**: the scoped entry now installs upstream's `setOpenGuard` with the same `DATABASE_CLOSED_MESSAGE` (`fix/scoped-db-closed-guard`, PR #30). Late events arriving after `dispose()`/`erase()` can no longer silently re-open `sessions.db` — the write is skipped as teardown noise instead of resurrecting a released handle (and blocking Windows `erase()` with EBUSY). Adds the dispose-then-event test scenario to the design record's §7.
 
 ## [0.11.0-scoped.7] - 2026-11-23
 
