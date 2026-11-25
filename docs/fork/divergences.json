@@ -820,6 +820,16 @@
       "baseBlob": null
     },
     {
+      "path": "docs/fork/SESSION-BACKFILL-DESIGN.md",
+      "status": "applied",
+      "surface": "fork documentation",
+      "change": "Design record for consuming the host MemoryHistoryPort (agent-chat PR #17): cursor-keyed backfill of the scope's saved sessions via the live path's snapshot shim, per-open budget, reconcile-deletion with live-session protection",
+      "reason": "Fork-owned file; never conflicts on merge. Written before implementation per UPSTREAM-MAPPING.md section 3.2; completes the #3 follow-up named in SESSION-SEARCH-DESIGN.md §9.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
       "path": "tests/scoped/session-search.test.ts",
       "status": "applied",
       "surface": "session search (scoped #3) tests",
