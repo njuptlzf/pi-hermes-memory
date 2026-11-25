@@ -60,9 +60,11 @@ turn indexer writes.
 
 ## 2. Option surface and full call chain
 
-**Additive, fork-owned only. Zero upstream files, zero `divergences.json`
-content changes** (the two registered session-search rows may get their
-`change` text extended — that is registry description, not a new row).
+**Additive, fork-owned only. Zero upstream files.** `divergences.json` gains
+one row per new fork-owned file as the gate requires (this design record;
+implementation adds `history-types.ts` + the test file rows), mirroring how
+#27/#29 registered theirs. The two existing session-search rows may get their
+`change` text extended — registry description, not new rows.
 
 ### 2.1 New shim types — `src/scoped/history-types.ts`
 
