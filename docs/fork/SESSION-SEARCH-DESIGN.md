@@ -437,14 +437,21 @@ but **no** `getSessionFile` (to pin the §3.1 trap):
 6. **Tenant isolation** — two tenants with the same query; each tool sees only
    its own DB rows (mirrors `tests/scoped/multi-tenant.test.ts`).
 7. **Best-effort** — a throwing `complete`-less path or a closed DB does not
-   propagate out of the event handler. *As shipped:* the scoped entry installs
-   no `setOpenGuard`, so `getDb()` re-opens after `dispose()` and the closed
-   state cannot be produced through `entry.mount()` (that guard is upstream's
-   `src/index.ts` mechanism from #313). Test 7 drives the un-throwable paths
-   (null header, empty entries — resolve clean, no noise); test 7b pins the
-   `reportScopedIndexFailure` contract directly: closed-DB shape skipped,
-   other errors reach `console.error` via the microtask; test 11 runs a
-   throwing snapshot end-to-end through both handlers.
+   propagate out of the event handler. *As shipped:* the entry installs
+   `dbManager.setOpenGuard(...)` reusing the same `DATABASE_CLOSED_MESSAGE`
+   upstream sets (`src/index.ts:138`, `db.ts:84`), flipped by `dispose()` and
+   `erase()` — so a late event after teardown hits the closed path and is
+   skipped as noise instead of silently re-opening the file. Upstream needs the
+   guard because its 50 ms live-index timer can outlive an in-handler close
+   (#313); scoped closes at the contract boundary (`disposeProductSession`), so
+   here the guard is misuse-hardening: a host that violates dispose-last gets a
+   loud skip, and `erase()` cannot be EBUSY'd by a re-opened handle. Test 7
+   drives the un-throwable paths (null header, empty entries — resolve clean,
+   no noise); test 7b fires events **after** `dispose()` and asserts no rows
+   land and nothing is logged (this scenario was unproducible until the guard
+   landed); test 7c pins the skip-closed / report-rest contract directly on
+   `reportScopedIndexFailure`; test 11 runs a throwing snapshot end-to-end
+   through both handlers.
 8. **Chain is wired through the entry** — mount a handle with
    `tuning: { sessionSearch: false }` and confirm no tool is registered and
    `promptSection()` omits the sentence; mount with `true` (or omitted) and

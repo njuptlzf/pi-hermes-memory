@@ -295,7 +295,28 @@ describe("session_search: isolation + best-effort (§7 tests 6, 7, 11)", () => {
     assert.equal(capturedErrors.length, 0, "best-effort no-ops must not be reported");
   });
 
-  it("test 7b: the closed-DB error class is skipped as teardown noise, others are reported", () => {
+  it("test 7b: the dispose-after-index scenario — a late event hits the closed guard, is skipped as noise", async () => {
+    const { handle, handlers } = mountTenant({ root: tempRoot("late") });
+    await handle.ready;
+    const first = [messageEntry("m1", "user", "indexed before teardown", "2026-11-25T09:01:00Z")];
+    await fireTurnEnd(handlers, makeSnapshot(HEADER, first));
+    const before = statsOf(handle).messages;
+    assert.equal(before, 1);
+
+    await handle.dispose(); // dbClosed = true; getDb() now throws DATABASE_CLOSED_MESSAGE
+
+    // A host that violates the dispose-last contract fires another event.
+    const late = [...first, messageEntry("m2", "assistant", "must not be indexed", "2026-11-25T09:05:00Z")];
+    await fireTurnEnd(handlers, makeSnapshot(HEADER, late));
+    await handlers.get("session_shutdown")!({}, turnCtx(makeSnapshot(HEADER, late)));
+    await flushMicrotasks();
+
+    assert.equal(statsOf(handle).messages, 1, "no write lands after dispose");
+    assert.equal(capturedErrors.length, 0,
+      "the closed-DB error is teardown noise — reportScopedIndexFailure must skip it, not spam");
+  });
+
+  it("test 7c: the closed-DB error class is skipped, other errors are reported", () => {
     reportScopedIndexFailure(new Error(DATABASE_CLOSED_MESSAGE));
     assert.equal(capturedErrors.length, 0, "closed DB is noise, not a failure");
     reportScopedIndexFailure(new Error("disk on fire"));

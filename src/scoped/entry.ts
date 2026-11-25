@@ -46,7 +46,7 @@ import { attachScopedSessionIndex, mountScopedSessionSearch } from "./session-se
 import { createBackgroundGate } from "./background-gate.js";
 import type { MemoryCompletion } from "./completion-types.js";
 import { AtomicLockCoordinator } from "../store/atomic-lock-coordinator.js";
-import { DatabaseManager } from "../store/db.js";
+import { DatabaseManager, DATABASE_CLOSED_MESSAGE } from "../store/db.js";
 import { MemoryStore } from "../store/memory-store.js";
 import { StandingInstructions } from "../store/standing-instructions.js";
 import {
@@ -289,6 +289,20 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
   let disposed = false;
   let mounted = false;
 
+  // Reuse upstream's teardown guard mechanism (`src/index.ts:138`): once this
+  // handle has closed its mirror DB, any later `getDb()` throws
+  // DATABASE_CLOSED_MESSAGE instead of silently re-opening a file nobody
+  // tracks. Upstream needs it because a live-index timer can outlive its own
+  // `session_shutdown` close (#313); scoped needs the same because a host
+  // that violates the dispose-last contract could otherwise hand writes to a
+  // handle `dispose()`/`erase()` already released — and on Windows that
+  // reopened handle is what makes `erase()` fail with EBUSY. The message is
+  // the one `reportScopedIndexFailure`/`isDatabaseClosedError` already skip.
+  let dbClosed = false;
+  dbManager.setOpenGuard(() => {
+    if (dbClosed) throw new Error(DATABASE_CLOSED_MESSAGE);
+  });
+
   // Seed the mirror from Markdown on every open. New tenants start empty and
   // cost two indexed reads; tenants created by an earlier version get their
   // pre-existing entries indexed. The reconcile functions fingerprint the
@@ -498,6 +512,7 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
         // Close pinned connections first: Windows refuses to unlink an open file.
         // Both the markdown-mutation lock and the SQLite handle/lock live under
         // storageRoot, so all three must be released before the recursive rm.
+        dbClosed = true;
         dbManager.close();
         AtomicLockCoordinator.shared(dbLockPath).closeHandle();
         releaseLock(roots.storageRoot);
@@ -514,6 +529,7 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
       if (disposed) return;
       disposed = true;
       await ready;
+      dbClosed = true;
       dbManager.close();
       AtomicLockCoordinator.shared(dbLockPath).closeHandle();
       releaseLock(roots.storageRoot);
