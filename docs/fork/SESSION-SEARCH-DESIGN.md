@@ -50,8 +50,9 @@ Three independent facts about the current tree:
    Importing `registerSessionSearchTool` into a scoped module executes that
    `process.env`/`os.homedir()` read (`src/paths.ts:5-10`), violating the
    boundary rule in `AGENTS.md` and the host's admission scan. The two planned
-   divergences in `divergences.json:91-115` cover exactly these constants but
-   are not implemented.
+   divergences in `divergences.json:91-116` (`src/handlers/index-sessions.ts`
+   :91-103, `src/tools/session-search-tool.ts` :104-116) cover exactly these
+   constants but are not implemented.
 
 So the work is: mount a tool whose registration is fork-owned (no import-time
 env/home), feed the existing tables from a source the scoped adapter actually
@@ -100,7 +101,10 @@ every request: `opts.history?: FileEntry[]` from `HistoryStore`
 entry), so inside a tool/event handler:
 
 - `ctx.sessionManager.getHeader()` returns `{ id, timestamp, cwd }`;
-- `ctx.sessionManager.getEntries()` returns the current session's entries;
+- `ctx.sessionManager.getEntries()` returns the current session's entries —
+  **all** of them, including entries on abandoned branches (Pi's
+  `getEntries()` is a raw filter over `fileEntries`, not a leaf-chain walk:
+  `session-manager.js:1119-1121`); the consequence for indexing is §8 R9;
 - `ctx.sessionManager.getSessionFile()` returns `undefined` (no file).
 
 `parseSessionManagerSnapshot()` (`src/store/session-indexer.ts:233-249`)
@@ -232,14 +236,45 @@ import type { DatabaseManager } from "../store/db.js";
 export function mountScopedSessionSearch(pi: ExtensionAPI, dbManager: DatabaseManager): void {
   pi.registerTool({
     name: "session_search",
-    // schema + execute copied from registerLegacySessionSearchTool
-    // (src/tools/session-search-tool.ts:146-246), with `project` inert
+    // parameter schema + execute skeleton copied from
+    // registerLegacySessionSearchTool (src/tools/session-search-tool.ts:146-246),
+    // with `project` inert; the prose — description, promptSnippet,
+    // promptGuidelines, empty-index message — is REWRITTEN for the scoped
+    // reality, see "Wording is not part of the copy" below.
   });
 }
 export function attachScopedSessionIndex(
   pi: ExtensionAPI, dbManager: DatabaseManager, isReady: Promise<void>,
 ): void { /* §4.3 */ }
 ```
+
+**Wording is not part of the copy — the tool must not promise what this slice
+cannot deliver.** `policy.ts:13-14` states the rule for the prompt ("every
+sentence here has to be true of the assembly that emits it"); the tool's own
+text is held to the same rule, because the model reads it via the tool schema,
+not the policy prompt. Upstream's legacy wrapper prose — the part a naive
+implementation would copy along with the schema per §8 R1 — makes three claims
+that are **false** for the scoped mount:
+
+- description (`session-search-tool.ts:150-157`): *"Search across **past** Pi
+  coding sessions"*, with examples like *"What did we discuss about auth
+  **last week**?"* and *"Find the PR where we fixed the test hang"*. This
+  slice indexes only the **current** session (§0, §2 non-goals): "past weeks"
+  and cross-session PR archaeology return either nothing or this session's
+  rows. The scoped description must say current-session verbatim recall, and
+  its examples must ask about things said *in this conversation*.
+- empty-index message (`:197`): *"No sessions indexed yet. Run
+  **/memory-index-sessions** to import past sessions."* Under rpc
+  `registerCommand` is inert (§2 non-goal), and even upstream's command would
+  scan a sessions directory the tenant does not have. The scoped message must
+  not name a command: say the current session is not indexed yet and that
+  indexing happens as turns end.
+- `promptSnippet`/`promptGuidelines` (`:158-162`): both say *"previous
+  discussions"*, *"earlier sessions"* — same rewrite, scoped to this session.
+
+R1's "keep the wrapper thin" means thin **code**; the prose is fork-owned
+behavior, not boilerplate. §7 test 10 pins the wording so an upstream-copy
+paste or a later "sync with upstream" edit cannot reintroduce the lie.
 
 Why a new module instead of importing `registerSessionSearchTool`: importing it
 pulls `AGENT_ROOT` (§1). The pure functions it calls —
@@ -266,7 +301,9 @@ pi.on("turn_end", async (_event, ctx) => {
   try {
     dbManager.withCorruptionRecovery(() =>
       indexCurrentSession(dbManager, ctx.sessionManager));
-  } catch { /* best-effort: indexing must never break a turn */ }
+  } catch (error) {
+    reportScopedIndexFailure(error);   // best-effort, but never silent — see below
+  }
 });
 
 pi.on("session_shutdown", async (_event, ctx) => {
@@ -274,9 +311,39 @@ pi.on("session_shutdown", async (_event, ctx) => {
   try {
     dbManager.withCorruptionRecovery(() =>
       indexCurrentSession(dbManager, ctx.sessionManager));
-  } catch { /* best-effort: teardown must not fail on a stale index */ }
+  } catch (error) {
+    reportScopedIndexFailure(error);   // same helper, shared by both handlers
+  }
 });
+
+function reportScopedIndexFailure(error: unknown): void {
+  // Closed DB is teardown noise (dispose/erase already ran); anything else is
+  // a real failure that must be observable, never swallowed.
+  if (isDatabaseClosedError(error)) return;
+  queueMicrotask(() => {
+    console.error("[scoped-hermes] session index failed:", error);
+  });
+}
 ```
+
+`isDatabaseClosedError` is exported from `src/store/db.ts:86` — a pure check
+on the error, already in the new module's import chain (`DatabaseManager`).
+The `queueMicrotask` + `console.error` shape is not invented: it is exactly
+what `seedSearchMirror` uses for the same class of best-effort failure
+(`entry.ts:284-291`), so a failed index surfaces like a failed mirror seed —
+visible, non-fatal. Upstream solved the identical problem with
+`reportLiveSessionIndexError` (`src/handlers/session-live-index.ts:40-46`,
+issue #313: swallowing everything turned a broken disk into a silently
+un-indexed session while the post-teardown closed-DB error spammed warnings);
+this is the scoped analogue of its skip-closed/report-rest contract.
+
+An empty `catch { /* best-effort */ }` was rejected: `ScopedTelemetry`
+(`observability.ts:185-213`) re-throws from `measure` and its `operation` is a
+closed union (`open | erase | tool | completion`) — recording an index failure
+would mean widening a fork-owned type and re-throwing into a guard, for one
+line of stderr that the entry's own precedent already shows how to emit. If a
+metric for index failures is ever wanted, that is the follow-up that widens
+`ScopedOperation`, not this slice.
 
 `ctx.sessionManager` is typed on `ExtensionContext` in both installed Pi
 versions: `getHeader(): SessionHeader | null` (agent-chat
@@ -306,9 +373,11 @@ correction to an earlier assumption that the host would need to provide new
 | `indexLiveSession` returns null without a file | `session-indexer.ts:257-274` | yes |
 | Snapshot needs only header+entries | `session-indexer.ts:159-163,233-249`; test :457-462 | yes |
 | Provider tuning passthrough already exists | `src/scoped/provider.ts:59,106-113` | yes |
-| Planned import-time constant divergences | `docs/fork/divergences.json:91-115` | yes |
+| Planned import-time constant divergences | `docs/fork/divergences.json:91-116` | yes |
 | Host uses inMemory session, no JSONL | agent-chat `session.ts:829`; `session-manager.js:643-659,1375-1377` | yes |
 | Host emits events through shared pi | agent-chat `session.ts:806,841`; `agent-session.js:543-568,849-852` | yes |
+| `getEntries()` is a raw non-header filter (branches included) | Pi `session-manager.js:1119-1121`; branch/retry sites `agent-session.js:3487,3500` | yes |
+| Teardown order: shutdown handler can still write the DB | agent-chat `session.ts:854-866` (`disposeProductSession` emits `session_shutdown` at :858, `memory.dispose()` only at :866) | yes |
 
 ## 6. Impact surface — every file on the chain
 
@@ -328,7 +397,7 @@ correction to an earlier assumption that the host would need to provide new
 `src/store/session-parser.ts`, `src/tools/shared-output-view.ts`,
 `src/tools/tool-result-views.ts`, `src/types.ts`, `src/config.ts`,
 `src/paths.ts` — none is modified. **`divergences.json` gains no entry.**
-The two `planned` rows at :91-115 stay planned; this slice routes around them
+The two `planned` rows at :91-116 stay planned; this slice routes around them
 by not importing the affected modules.
 
 **Callers of changed signatures — enumerated, not asserted.**
@@ -336,7 +405,7 @@ by not importing the affected modules.
 
 | Symbol | Existing call sites | Treatment |
 | --- | --- | --- |
-| `indexCurrentSession(dbManager, snapshot)` | `src/index.ts` (upstream, via `indexLiveSessionOnce` at `session-indexer.ts:273`); `tests/store/session-indexer.test.ts:690,702,708` | Signature unchanged. New fork caller in `src/scoped/session-search.ts` (§4.3). Upstream caller stays on the existing path — no default change for it. |
+| `indexCurrentSession(dbManager, snapshot)` | `src/index.ts` (upstream — reached indirectly: `message_end`/shutdown handlers call `indexLiveSession` through an injected `options.indexLiveSessionFn`, `session-live-index.ts:75,84`, which calls `indexLiveSessionOnce` → `indexCurrentSession` at `session-indexer.ts:273`; a graph query on `indexLiveSession` shows **zero** direct inbound callers because of that indirection — the chain is real, enumerate it from the call sites not the edge table); `tests/store/session-indexer.test.ts:690,702,708` | Signature unchanged. New fork caller in `src/scoped/session-search.ts` (§4.3). Upstream caller stays on the existing path — no default change for it. |
 | `searchSessions(dbManager, query, opts)` | `src/tools/session-search-tool.ts:201`; `tests/store/session-search.test.ts` | Signature unchanged. New fork caller in the scoped tool wrapper. |
 | `getIndexedMessageCount(dbManager)` | `src/tools/session-search-tool.ts:195`; `tests/store/session-search.test.ts` | Signature unchanged. New fork caller in the scoped tool wrapper. |
 | `buildScopedMemoryPolicy(options)` | `src/scoped/entry.ts:340` (production); scoped prompt tests | Signature unchanged; only `hasSessionSearch` changes from the literal `false` at :348. |
@@ -376,16 +445,31 @@ but **no** `getSessionFile` (to pin the §3.1 trap):
    with `PI_CODING_AGENT_DIR` pointing at a sentinel path and assert no file
    under it is touched (guards against accidentally importing
    `session-search-tool.ts` later).
+10. **Wording matches the capability** (§4.2, "Wording is not part of the
+    copy") — assert the registered tool's `description`, `promptSnippet` and
+    `promptGuidelines` contain no "past sessions"/"last week"/"earlier
+    sessions" phrasing and no `/memory-index-sessions` string anywhere in the
+    tool surface (execute included, via an empty-DB call). Pin the scoped
+    phrases positively too — "this session" — so a rewrite that drops the
+    claim entirely also fails. This test is what stops R1's copy discipline
+    from degrading into a verbatim paste on the next upstream sync.
+11. **Index failure is observed, not swallowed** (§4.3) — with a closed
+    `DatabaseManager`, fire `turn_end`: no console.error (teardown noise is
+    skipped). With a failing DB path (corrupt beyond recovery, or a stubbed
+    `indexCurrentSession` throw), fire `turn_end`: the error reaches
+    `console.error` via the microtask and the handler still resolves — the
+    turn is never broken by indexing.
 
 ## 8. Risks
 
 | ID | Risk | Mitigation / decision |
 | --- | --- | --- |
 | R0 | **Default-value change:** `hasSessionSearch` moves from the literal `false` (`entry.ts:348`) to "mounted by default" whenever `tuning.sessionSearch` is omitted — which is **every** production call, because agent-chat does not pass `tuning` (§4.1). Consequence: every agent-chat tenant gains a new tool in its schema and a `session_search` sentence in its prompt, plus one small indexed transaction per turn (R6), without any host-side opt-in. | **Decision: keep as additive, default on** — the feature is the goal of #3, and an opt-in default would leave it permanently off on the only host that uses this provider. Recorded here explicitly per `UPSTREAM-MAPPING.md` §3.2 element 4. The cost is borne per tenant and bounded by the tenant DB. A direct user who wants the old surface sets `tuning.sessionSearch: false`; making that reachable from agent-chat requires a protocol change and is a follow-up (§9). Test 8 pins both states. |
-| R1 | **Tool wrapper is restated.** ~100 lines of schema/snippet/cap logic are copied from `src/tools/session-search-tool.ts:146-246` because that module imports `AGENT_ROOT` at load time. This is a **forced** reimplementation (`UPSTREAM-MAPPING.md` §3.1), not a convenience rewrite; the constraint is named in the new file's header. Drift risk: upstream edits to limits/description will not flow automatically. | Reuse the pure functions and constants where exported; keep the wrapper thin; note in TASKS.md that a future lazy-constant divergence (already planned at `divergences.json:104-115`) would let us delete the wrapper and import upstream's directly. |
+| R1 | **Tool wrapper is restated.** ~100 lines of schema/snippet/cap logic are copied from `src/tools/session-search-tool.ts:146-246` because that module imports `AGENT_ROOT` at load time. This is a **forced** reimplementation (`UPSTREAM-MAPPING.md` §3.1), not a convenience rewrite; the constraint is named in the new file's header. Drift risk: upstream edits to limits/description will not flow automatically — and the description prose must **not** flow even when it could, because upstream's wording promises past/cross-session recall this slice does not deliver (§4.2 "Wording is not part of the copy"). | Reuse the pure functions and constants where exported; keep the wrapper code thin but treat the prose as fork-owned (copy the schema/execute skeleton, rewrite description/snippet/guidelines/empty-message); note in TASKS.md that a future lazy-constant divergence (already planned at `divergences.json:104-116`) would let us delete the wrapper and import upstream's directly — **and would require re-applying the scoped wording**, since importing upstream's tool re-imports its false "past sessions" promise. Test 10 pins the wording against both drift paths. |
 | R2 | **`indexLiveSession` trap** — using it silently indexes nothing because agent-chat's `getSessionFile` exists but returns undefined (`session-indexer.ts:262-263`). | §3.1 mandates `indexCurrentSession` + `withCorruptionRecovery`. Test 2 fails if the wrong function is used (no hits). |
 | R3 | **Variant default.** Upstream default is `legacy` (`config.ts:117`), but a host could set `config.sessionSearch.variant = "anchors"` through `ScopedHermesOptions.config` — anchors has no data source here. | Decision: the fork-owned mount **ignores** `variant` and always uses legacy. Additive, documented here; no default-value change for the tool's behavior. A host asking for anchors gets legacy results rather than a tool that returns nothing. |
-| R4 | **Project filter.** Upstream's tool exposes `project` (`session-search-tool.ts:166`) and `searchSessions` filters `s.project` (`session-search.ts:105-109`). `parseSessionManagerSnapshot` derives project from `header.cwd.split('/').pop()` (:243) — a cwd basename, not a project store. | Decision: keep the parameter but treat it as the cwd-derived label, not a project axis; no project store is introduced. Windows path separators (`\`) mean the basename can be the whole path — cosmetic in the result header, not an isolation issue. Do not "fix" by reintroducing a project dimension. |
+| R4 | **Project filter.** Upstream's tool exposes `project` (`session-search-tool.ts:166`) and `searchSessions` filters `s.project` (`session-search.ts:105-109`). `parseSessionManagerSnapshot` derives project from `header.cwd.split('/').pop()` (:243) — a cwd basename, not a project store. | Decision: keep the parameter but treat it as the cwd-derived label, not a project axis; no project store is introduced. Windows path separators (`\`) mean the basename can be the whole path — cosmetic in the result header, not an isolation issue. On the agent-chat path the label is worse than unreadable but still meaningless: `header.cwd` is `opts.dataDir` (`agent-chat session.ts:774`), a per-product data directory whose basename is not a project name the user recognizes. Do not "fix" by reintroducing a project dimension. |
+| R9 | **Abandoned branches are indexed and searchable.** Pi retry/compaction calls `sessionManager.branch()` / `branchWithSummary()` (`agent-session.js:3487,3500`); `getEntries()` returns every non-header entry regardless of leaf reachability (`session-manager.js:1119-1121`), so a superseded answer to a retried turn stays in `messages` and `session_search` can surface it next to — or instead of — the current one. Pi's context compaction is enabled by default (agent-chat `session.ts:225-229` documents the pi defaults; `:781` only re-tunes thresholds), so this is not a rare path. | **Accepted, aligned with upstream:** upstream's JSONL path indexes the same full entry list (a branched JSONL file contains abandoned entries too), so filtering by leaf would be scoped-only drift against the reuse rule. The rows are verbatim-true (they *were* said) even when superseded; the result header's date lets the model prefer the newer wording. A leaf-reachable filter needs `parent_id`/`leaf_id` columns the `messages`/`sessions` schema does not have (§1 item 2) — that is mirror-schema work owned by #4, recorded in §9. |
 | R5 | **Session id is host-owned.** `header.id` comes from the restored history; a new scope/session id creates a new row. Old rows stay in the tenant DB until erasure; no prune in this slice. | Accepted: the file is per-tenant, so growth is bounded by that tenant. Retention (#4) is a follow-up; §2 names it. |
 | R6 | **Write volume.** `turn_end` writes on every turn; content is truncated by `truncateMessageContent` (`session-indexer.ts:137` → `constants.ts` max) and inserts are `INSERT OR IGNORE`, so steady-state cost is one small transaction per turn. | Tests 3-4 pin idempotence. A direct user can disable the slice with `tuning.sessionSearch: false`; on the agent-chat path the cost is accepted with R0's default-on decision until the protocol carries the flag. |
 | R7 | **Import-time env coupling.** Adding an import of `session-search-tool.ts` or `index-sessions.ts` later would reintroduce `AGENT_ROOT` eval. | Test 9 runs in a child process with a sentinel env path. The new module's header names the constraint. |
@@ -401,3 +485,8 @@ That same protocol change is the natural place to carry a `tuning`/`sessionSearc
 flag, which would make the opt-out in §4.1 reachable from agent-chat (R0).
 That is the change that makes #3 fully answer "what did we discuss last week"
 across sessions; this record only makes "in this session, verbatim" work.
+
+Also deferred to #4 (schema work on `sessions`/`messages`, per §8 R9): a
+leaf-reachable filter (or `parent_id`/`leaf_id` columns) so `session_search`
+can hide abandoned-branch rows after retry/compaction instead of surfacing
+them alongside the current answer.
