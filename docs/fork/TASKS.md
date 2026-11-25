@@ -40,6 +40,17 @@ be moved with `npm dist-tag add` even though `publish-scoped.mjs` refuses to
 *publish* a prerelease directly under `latest`. Future releases keep using
 `--tag next`, then promote `latest` explicitly if that build is to become the
 default install.
+
+**The package is fork-owned — "stable" can only mean a fork build.** Every
+published version of `@njuptlzf/pi-hermes-memory` is on the `*-scoped.N` line,
+starting at `0.11.0-scoped.1` (`ee3d8dd`, the fork's publishable-package commit).
+The upstream source repository (`chandra447/pi-hermes-memory`) publishes a
+*different package name*; nothing from upstream ever lands on this package's
+`latest` or `next`. Both dist-tags therefore always select a fork build —
+`0.11.0-scoped.1` is an older fork build, not "the upstream stable".
+Moving `latest` back is a fork-version rollback, never a switch to upstream.
+"Install the stable release" means "install the fork build we promoted"; the
+`*-scoped.N` suffix marks the release line, not a perpetual beta.
 agent-chat packages are at `v0.8.0` across protocol/server/web (separate repo).
 The local `npmmirror.com` mirror lags — do not use it to judge publish state;
 pin `--registry=https://registry.npmjs.org --prefer-online` when verifying.
@@ -279,9 +290,14 @@ install. These make the default-timeout full suite deterministic.
 
 ## Release mechanics (fork line)
 
-- `release.yml` **always checks out `main`**, whose `package.json` is
-  `0.11.0` (upstream, no scoped code). Running it would publish the wrong
-  package. Do not use it for the fork line.
+- `release.yml` **always checks out `main`**, whose `package.json` used to be
+  `0.11.0` (the pre-fork version, before the fork introduced scoped packaging).
+  Running it would publish the wrong package. Do not use it for the fork line.
+- **All versions on npm are fork builds.** `@njuptlzf/pi-hermes-memory` is the
+  fork's own package (created at `ee3d8dd`); upstream's source repo publishes
+  under a different name. The `*-scoped.N` suffix is this fork's release line,
+  not a signal that a non-fork "stable" exists. Promoting a build to `latest`
+  makes it the default `npm install`; rolling back picks an older fork build.
 - **Manual path (current)**: bump version + `PROVIDER_VERSION` together, add the
   CHANGELOG section, commit/tag, then run `node scripts/publish-scoped.mjs`.
   It uses the machine's `~/.npmrc` token for the official registry (reads only
