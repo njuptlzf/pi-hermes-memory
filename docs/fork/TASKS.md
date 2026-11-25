@@ -34,7 +34,12 @@ capability flag are recorded inline.
 | **P5 PR-A — D1 duplicate injection + R8 `reviewEnabled` port gap** | PR #21, `344f412` | `src/scoped/prompt-blocks.ts` strips our own policy/profile/standing tags before appending the fresh section, in both pi branches; `tuning.reviewEnabled` folds into config (Chain A). Tests `tests/scoped/prompt-blocks.test.ts` (7 cases). No pin code. |
 | **Standing instructions (candidate #8, P5 PR-B)** | PR #22, `feb9596` | `layout.standingFile` absolute beside `USER.md` (profile dir, scope fallback); `StandingInstructions` built iff enabled, lazy-loaded once, rendered last in `promptSection()`; `tuning.standingInstructions` → config. Prompt only — no write surface. Design `docs/fork/P5-STANDING-DESIGN.md`, tests `tests/scoped/standing.test.ts` (8 cases) |
 
-Official npm state (verified 2026-11-23): `latest = 0.11.0-scoped.1` (untouched), `next = 0.11.0-scoped.7`.
+Official npm state (verified 2026-11-25): `latest = 0.11.0-scoped.8`, `next = 0.11.0-scoped.8`.
+Both tags were advanced to `.8` by hand after the release; published prereleases may
+be moved with `npm dist-tag add` even though `publish-scoped.mjs` refuses to
+*publish* a prerelease directly under `latest`. Future releases keep using
+`--tag next`, then promote `latest` explicitly if that build is to become the
+default install.
 agent-chat packages are at `v0.8.0` across protocol/server/web (separate repo).
 The local `npmmirror.com` mirror lags — do not use it to judge publish state;
 pin `--registry=https://registry.npmjs.org --prefer-online` when verifying.
