@@ -33,6 +33,8 @@ capability flag are recorded inline.
 | **Review tuning (#6 + #21 + #22)** | — | Read `MemoryConfig` instead of the `?? 6` literal; `turn_end` counts `toolResults`; `nudgeMode` + `minUserTurnsBeforeReview` additive in fork-owned types; `ProviderContext.tuning` passthrough. Design `docs/fork/P4-TUNING-DESIGN.md`, tests `tests/scoped/tuning.test.ts` |
 | **P5 PR-A — D1 duplicate injection + R8 `reviewEnabled` port gap** | PR #21, `344f412` | `src/scoped/prompt-blocks.ts` strips our own policy/profile/standing tags before appending the fresh section, in both pi branches; `tuning.reviewEnabled` folds into config (Chain A). Tests `tests/scoped/prompt-blocks.test.ts` (7 cases). No pin code. |
 | **Standing instructions (candidate #8, P5 PR-B)** | PR #22, `feb9596` | `layout.standingFile` absolute beside `USER.md` (profile dir, scope fallback); `StandingInstructions` built iff enabled, lazy-loaded once, rendered last in `promptSection()`; `tuning.standingInstructions` → config. Prompt only — no write surface. Design `docs/fork/P5-STANDING-DESIGN.md`, tests `tests/scoped/standing.test.ts` (8 cases) |
+| **#4 residual D — recovery sidecar convergence** | pending PR | `ready` chain awaits `store.maintainRecoveryFiles()` (layered facade → scope + profile roots). Upstream `runRecoveryMaintenance` avoided — its `listMemoryStoreDirs` walks `projectsRoot` (forced). Design `docs/fork/P6-SESSION-MAINTENANCE-DESIGN.md`, tests `tests/scoped/session-maintenance.test.ts` cases 1-3 |
+| **#4 residual A — bounded retention prune** | pending PR | `src/scoped/session-retention.ts` calls pure `pruneOldSessions` in `withCorruptionRecovery`, kicked off before backfill; default `sessionRetentionDays=0` = no-op. No cursor writes — backfill's own equality skip keeps pruned-but-listed sessions absent. Same design record, tests cases 4-6 |
 
 Official npm state (verified 2026-11-25): `latest = 0.11.0-scoped.8`, `next = 0.11.0-scoped.8`.
 Both tags were advanced to `.8` by hand after the release; published prereleases may
@@ -212,9 +214,12 @@ adopted rows in numeric order; #21/#22 travel with #6.
 (2026-11-22 / 2026-11-23). #3 is now fully answered by the host history port (agent-chat PR #17,
 `dcb07c3`) plus the scoped backfill slice (`SESSION-BACKFILL-DESIGN.md`):
 `session_search` recalls previously saved sessions of this scope, not just the
-live one. The remaining 延后 count is 6: #1, #2, #4, #11, #12, #18 (#4 keeps
-its 延后 status for prune/retention, `session_files`, ephemeral cleanup and
-recovery maintenance — only its backfill half landed). #8 landed in two PRs per the design's §9 split:
+live one. #4 residuals D (recovery sidecar convergence) and A (bounded retention
+prune) are implemented 2026-11-26 per `P6-SESSION-MAINTENANCE-DESIGN.md` —
+both fork-owned, default behavior unchanged. `session_files` materialisation and
+orphan review-session cleanup remain unneeded: their capabilities are covered by
+the backfill cursor + reconcile. The remaining 延后 count is 5: #1, #2, #4
+(the two covered tails only), #11, #12, #18. #8 landed in two PRs per the design's §9 split:
 **PR #21** fixed D1 (the section was injected twice on the agent-chat path) and
 folded in R8's `reviewEnabled` port gap — same defect class, a policy switch a
 provider-loaded host could not reach; **PR #22** wired user-level standing
