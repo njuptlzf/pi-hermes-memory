@@ -43,6 +43,7 @@ import { consolidateViaCompletion } from "./consolidation.js";
 import { setupScopedReviewFlush, type NudgeMode } from "./review-flush.js";
 import { setupScopedCorrectionDetector } from "./correction.js";
 import { attachScopedSessionIndex, mountScopedSessionSearch, startScopedHistoryBackfill } from "./session-search.js";
+import { runScopedSessionRetention } from "./session-retention.js";
 import { createBackgroundGate } from "./background-gate.js";
 import type { MemoryCompletion } from "./completion-types.js";
 import type { MemoryHistoryPort } from "./history-types.js";
@@ -343,8 +344,15 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
   }
 
   const ready = Promise.all([scopeStore.loadFromDisk(), profileStore?.loadFromDisk() ?? Promise.resolve()])
-    .then(() => {
+    .then(async () => {
       seedSearchMirror();
+      // Recovery sidecars converge only here: a store that stops being written
+      // never reaches saveToDisk, so stale .recovery-* / .retired-* files would
+      // otherwise live forever. The layered facade fans this out to both roots;
+      // upstream's runRecoveryMaintenance is not usable here — it walks a
+      // projectsRoot and constructs stores from disk paths (tenant model has
+      // neither). Best-effort: the catch below logs instead of failing open.
+      await store.maintainRecoveryFiles();
     })
     .catch((error: unknown) => {
       // Surface the failure without turning it into an unhandled rejection when
@@ -360,6 +368,12 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
   // dispose() and erase(), so a teardown mid-pass stops cleanly.
   let currentSessionId: string | null = null;
   if (sessionSearchEnabled && options.history) {
+    // #4 retention (P6 design): prune BEFORE backfill starts. Both await `ready`;
+    // prune's body is synchronous, so it completes before backfill's first
+    // `await history.list()`. Default sessionRetentionDays = 0 → no task at all.
+    if ((config.sessionRetentionDays ?? 0) > 0) {
+      void runScopedSessionRetention(dbManager, config.sessionRetentionDays!, ready, () => dbClosed);
+    }
     void startScopedHistoryBackfill(
       dbManager, options.history, ready,
       () => currentSessionId, () => dbClosed,

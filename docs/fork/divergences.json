@@ -858,6 +858,46 @@
       "risk": "new",
       "anchors": [],
       "baseBlob": null
+    },
+    {
+      "path": "docs/fork/WIRING-CONTRACT.md",
+      "status": "applied",
+      "surface": "fork documentation",
+      "change": "Decision-level wiring norm: meaning of unwired capabilities, fork boundary authority, per-capability gap/benefit matrix, scope boundary (host wiring docs live in the host repo)",
+      "reason": "Fork-owned file; never conflicts on merge. Encodes the 2026-11-26 wiring judgement rule; complements UPSTREAM-MAPPING.md and WIRING-RATIONALE.md.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "docs/fork/P6-SESSION-MAINTENANCE-DESIGN.md",
+      "status": "applied",
+      "surface": "fork documentation",
+      "change": "Design record for #4 residuals D (recovery sidecar convergence) + A (bounded retention prune with backfill-cursor skip reasoning)",
+      "reason": "Written before implementation per UPSTREAM-MAPPING.md section 3.2; fork-owned path.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "src/scoped/session-retention.ts",
+      "status": "applied",
+      "surface": "scoped session retention (#4)",
+      "change": "Fork-owned module calling the pure upstream pruneOldSessions inside withCorruptionRecovery, after ready, best-effort; no cursor writes",
+      "reason": "Forced: upstream prune runs from the CLI-only index.ts startup hook; a host-loaded provider must restate the call at its own boundary. Engine function reused unchanged.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "tests/scoped/session-maintenance.test.ts",
+      "status": "applied",
+      "surface": "scoped session maintenance tests",
+      "change": "6 cases: D sidecar prune (scope+profile roots, best-effort) + A retention (default keeps, prune on re-open, pruned-listed-not-reindexed)",
+      "reason": "fork-owned coverage for the #4 D+A slice",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
     }
   ]
 }

@@ -1,8 +1,10 @@
 # Why scoped wiring is incremental
 
 Fork-owned file. Upstream does not know this path, so a merge never touches it.
-Read this alongside `docs/fork/UPSTREAM-MAPPING.md` (what may change and why)
-and `docs/fork/TASKS.md` (the single source of truth for current status).
+Read this alongside `docs/fork/UPSTREAM-MAPPING.md` (what may change and why),
+`docs/fork/WIRING-CONTRACT.md` (why we wire at all, what boundary the fork may
+change, and what each capability buys), and `docs/fork/TASKS.md` (the single
+source of truth for current status).
 
 This is a design record, not a task list. It answers one question that keeps
 coming up when someone compares `src/index.ts` with `src/scoped/entry.ts`:
@@ -102,17 +104,26 @@ The remaining upstream surface was recorded as **22 candidates** and assessed on
 basis. The recurring pattern:
 
 - **Deferred** means an external prerequisite is missing. Skills need a
-  tenant-skill root from the host; session search and indexing need a per-scope
-  session source (reading the host-global sessions directory would leak across
-  tenants); a manual-consolidate trigger needs a host call surface, not a TUI
-  command.
+  tenant-skill root from the host; a manual-consolidate trigger needs a host call
+  surface, not a TUI command. Session search is **no longer deferred** — the
+  per-scope session source arrived as the host's `history` port (agent-chat PR
+  #17, `dcb07c3`) and was consumed by the backfill slice; only the #4 tail
+  (retention / `session_files` metadata / ephemeral cleanup / recovery sidecar)
+  remains open.
 - **Not done** means the host design deliberately has no place for it. A project
   axis would reintroduce the shared dimension the host removed; TUI commands are
   inert in rpc; repair and migration commands have no gap to fill because tenant
   roots are host-computed and the FTS5 mirror is reconciled on every open.
-- **Adopted and pending** (#5 correction detection, #6 tool-call review nudge,
-  #8 standing instructions, #21/#22 config passthrough) are ordinary ordering:
-  they are next in line, taken in numeric order, with #21/#22 travelling with #6.
+- **Adopted** (#5 correction detection, #6 tool-call review nudge, #8 standing
+  instructions, #21/#22 config passthrough) are **all complete** as of
+  2026-11-23; see `TASKS.md` for commits. There is no "pending scheduling" backlog
+  left among the adopted rows.
+
+**Important correction (2026-11-26):** a missing host field or zero scoped calls
+is **not** a reason to defer. It is the normal starting state of a wiring task —
+the host contract is still unpublished and can be extended. The only admissible
+blocker is a forced constraint with no tenant-safe equivalent (§2 above and
+`WIRING-CONTRACT.md` §2–§3). "延后/不做" must name that constraint explicitly.
 
 ## 5. How to judge the current state
 
