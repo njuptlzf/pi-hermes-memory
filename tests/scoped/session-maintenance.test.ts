@@ -196,4 +196,58 @@ describe("#4 A — retention prune (§7)", () => {
       "pruned listed session must stay absent — a cursor sentinel would re-add it",
     );
   });
+
+  // ── host policy channel (agent-chat PR #20-era MemoryPolicy) ──────────
+  // The config-driven cases above prove the prune works; these prove the
+  // HOST path reaches the same gate. Design: agent-chat
+  // docs/design/记忆数据保留政策设计稿.md §3 (policy folds into
+  // config.sessionRetentionDays, Chain A; policy > tuning > config spread).
+
+  it("7 — ctx-level policy.dataRetentionDays drives the same prune as config", async () => {
+    const p = retentionPort(rows());
+    const root = tempRoot("policy-retention");
+    let handle = openTenant({ storageRoot: root, history: p });
+    await handle.ready;
+    await waitFor(() => sessionIds(handle).length === 2);
+
+    // Re-open WITHOUT the legacy `config` shape — the policy field alone
+    // must flip the gate. This is exactly what provider.open forwards.
+    const prev = handle;
+    await prev.dispose();
+    handles.pop();
+    handle = openTenant({ storageRoot: root, history: p, policy: { dataRetentionDays: 1 } });
+    await handle.ready;
+    await waitFor(() => sessionIds(handle).length === 1);
+    assert.deepEqual(sessionIds(handle), ["recent"], "policy must enable the prune on its own");
+  });
+
+  it("8 — policy wins over tuning.retentionDays; tuning alone still works", async () => {
+    const p = retentionPort(rows());
+    const root = tempRoot("policy-precedence");
+    let handle = openTenant({ storageRoot: root, history: p });
+    await handle.ready;
+    await waitFor(() => sessionIds(handle).length === 2);
+
+    // Host says 3650 days, caller knob says 1: governance outranks the knob,
+    // so nothing is pruned.
+    const prev = handle;
+    await prev.dispose();
+    handles.pop();
+    handle = openTenant({
+      storageRoot: root, history: p,
+      policy: { dataRetentionDays: 3650 },
+      tuning: { retentionDays: 1 },
+    });
+    await handle.ready;
+    await new Promise((r) => setTimeout(r, 150));
+    assert.deepEqual(sessionIds(handle).sort(), ["ancient", "recent"], "policy must beat tuning");
+
+    // Tuning alone (direct-user path) is a working fallback for the same gate.
+    await handle.dispose();
+    handles.pop();
+    handle = openTenant({ storageRoot: root, history: p, tuning: { retentionDays: 1 } });
+    await handle.ready;
+    await waitFor(() => sessionIds(handle).length === 1);
+    assert.deepEqual(sessionIds(handle), ["recent"], "tuning fallback must prune");
+  });
 });

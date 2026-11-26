@@ -251,3 +251,74 @@ reads `sessionRetentionDays` already present in `options.config` (§1 fact 6).
 5. Fork PR (base/head `njuptlzf/pi-hermes-memory`), docs/status update in `TASKS.md`.
 6. agent-chat contract work (if retention is to be host-configurable) is a
    **separate repo/PR**, out of scope here — see `WIRING-CONTRACT.md` §5.
+
+## 7. Host reachability — `ctx.policy.dataRetentionDays` (follow-up to §6 step 6)
+
+§6 shipped the prune behind `config.sessionRetentionDays`, defaulting to 0 and
+documenting that host configurability was a separate agent-chat effort. That
+contract landed (agent-chat docs: `记忆数据保留政策设计稿.md`, spec baseline
+PRs #18–#21). This section wires the fork end.
+
+### 7.1 Call chain — exact code shapes
+
+```
+agent-chat session.ts   resolveMemoryProvider(...).open({ ..., policy })
+  └─ provider.ts        ProviderContext.policy?: { dataRetentionDays?: number }
+       └─ openScopedHermesMemory({ ..., policy: ctx.policy })
+            └─ entry.ts openWithRoots
+                 const retentionDays = options.policy?.dataRetentionDays
+                                       ?? tuning?.retentionDays;      // policy first
+                 config = { ...default, ...options.config,
+                   ...(retentionDays !== undefined
+                     ? { sessionRetentionDays: retentionDays } : {}),  // Chain A
+                   ... }
+                 // gate unchanged (§2.2): (config.sessionRetentionDays ?? 0) > 0
+                 //   → runScopedSessionRetention(dbManager, days, ready, dbClosed)
+```
+
+- **Chain A fold**, same shape as `reviewEveryTurns → nudgeInterval`
+  (`entry.ts:241`). `sessionRetentionDays` is a real `MemoryConfig` field
+  (`types.ts:142`), so nothing is re-derived and no new number is invented.
+- **Precedence policy > tuning > raw `options.config` spread order**: policy
+  and tuning collapse into one variable folded after the config spread, so
+  either beats a legacy `config.sessionRetentionDays`; between them `??`
+  keeps the host's governance ahead of the caller's knob.
+- **`capabilities.dataRetention: true`** (`provider.ts:88-100`) declares the
+  promise the host can warn against: sessions older than N days are no longer
+  retrievable from the tenant mirror. It is a fact about §2.2's prune, not a
+  switch — a host passing `policy` to a provider without this flag gets
+  agent-chat's mismatch warning, not a silent no-op.
+
+### 7.2 Impact surface
+
+| File | Change |
+| --- | --- |
+| `src/scoped/provider.ts` | `ProviderContext.policy?`; `capabilities.dataRetention`; forward `policy` at the `openScopedHermesMemory` call site |
+| `src/scoped/entry.ts` | `ScopedHermesOptions.policy?`; `ScopedMemoryTuning.retentionDays?`; `retentionDays` local + Chain A fold line |
+| `tests/scoped/session-maintenance.test.ts` | cases 7 (policy-only prune, no `config`) and 8 (policy> tuning, tuning-alone fallback) |
+| `tests/scoped/provider.test.ts` | descriptor assertion for `dataRetention: true` |
+
+No upstream file touched; zero new `divergences.json` rows; the §2.2 gate and
+`session-retention.ts` are unchanged — this PR only feeds the existing door.
+
+### 7.3 Risks
+
+- **Default behavior unchanged**: no `policy`, no `tuning` → `retentionDays`
+  stays undefined → gate reads `0` → no task, identical to §6. The whole host
+  path is opt-in via a product manifest field.
+- **Misread semantics** (prune ≠ history deletion): guarded by the capability
+  doc-comment and agent-chat's policy draft §2.1 wording ("no longer
+  retrievable", HistoryStore stays authoritative).
+- **Precedence trap**: a direct user passing both `config.sessionRetentionDays`
+  AND `policy`/`tuning` gets the folded value (policy/tuning wins) — matches
+  the injected-root-wins rule at `entry.ts:251-253`; documented in 7.1.
+
+### 7.4 Cross-references (checked after writing)
+
+| Claim | Where | Verified |
+| --- | --- | --- |
+| Chain A fold line exists for 5 prior fields | `entry.ts:241-250` | yes |
+| §2.2 gate reads `config.sessionRetentionDays` | `entry.ts` kickoff `?? 0 > 0` | yes |
+| `sessionRetentionDays` upstream default 0 | `types.ts:142`, `constants.ts` | yes |
+| capability doc pattern = sharedProfile precedent | `provider.ts:80-90` | yes |
+| host side contract (out of fork repo) | agent-chat `docs/design/记忆数据保留政策设计稿.md` | pointer only, per WIRING-CONTRACT §5 |
