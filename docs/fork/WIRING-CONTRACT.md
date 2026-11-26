@@ -96,13 +96,15 @@ host 侧的契约形态与调用点由 host 仓库自己的接线文档负责；
 5. 仅当命中 forced 约束且**无等价注入** → 才可标"不做"或"延后"，并在
    `TASKS.md` 写出具体约束，而不是只写"host 不支持"。
 6. **走到 host 契约变更那一步之前，先过通用性闸**（2026-11-26 用户明确）：
-   fork 想要的注入是**政策类**（任何 provider 都答得出——数据保留期、预算）还是
-   **机制类**（只有本引擎有 this concept——review 节奏、FTS 开关、STANDING.md）？
-   机制类永不索取 host 契约字段：留在 fork-owned `ScopedMemoryTuning`（direct-user
-   通道），host 可达性交给提供方模块自读配置或宿主部署级配置。政策类才可提请 host
-   仓库评估契约扩展，且必须用 provider 无关的语言命名并配 capability 声明——
-   规范文本与判定例子属 agent-chat 仓库（其端口演进规范），本条只固定 fork 侧
-   "什么诉求值得去敲 host 的门"。
+   判据不是字段的出身，而是**能否用宿主期望的行为语言重述、且对其他 provider 仍可
+   conformance 判定**。重述成功（如 retention → "N 天前的会话原文不再可检索"）→
+   才可提请 host 仓库评估契约扩展，且必须用 provider 无关的语言命名并配 capability
+   声明；重述失败（如 review 节奏、FTS 开关——换家引擎就无可观察语义）→ 不索取 host
+   契约字段：留在 fork-owned `ScopedMemoryTuning`（direct-user 通道），host 可达性交给
+   提供方模块自读配置或宿主部署级配置。**字段可选 + 默认值维持现行为只解决向后兼容，
+   不解决契约正当性**——只有某家懂的可选字段照样带来静默不合规、全生态声明税和
+   契约并集化。规范文本与判定例子属 agent-chat 仓库（其端口演进规范），本条只固定
+   fork 侧"什么诉求值得去敲 host 的门"。
 
 ## 4. 不接缺什么、接了补什么：逐项能力矩阵
 
