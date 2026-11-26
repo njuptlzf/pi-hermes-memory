@@ -63,6 +63,14 @@ interface ProviderContext {
    * — the provider still imports no host SDK.
    */
   readonly tuning?: ScopedMemoryTuning;
+  /**
+   * Host data-governance requirements (agent-chat `MemoryPolicy`, mirrored
+   * structurally — same no-import discipline as `history`). Currently
+   * `dataRetentionDays`; forwarded to the tenant, where it outranks
+   * `tuning.retentionDays`. Optional: a host without it keeps upstream
+   * defaults.
+   */
+  readonly policy?: { readonly dataRetentionDays?: number };
 }
 
 interface ProviderSession {
@@ -87,6 +95,14 @@ interface ProviderSession {
  */
 export interface ScopedHermesProviderCapabilities {
   readonly sharedProfile?: boolean;
+  /**
+   * true = honours `ctx.policy.dataRetentionDays` by pruning the per-scope
+   * session mirror past the window (PR #36's `runScopedSessionRetention`;
+   * tests/scoped/session-maintenance.test.ts + policy-retention cases).
+   * Sessions still live in the host's HistoryStore — the promise is about
+   * the memory layer's retrievability, not about deleting user history.
+   */
+  readonly dataRetention?: boolean;
 }
 
 export interface ScopedHermesProvider {
@@ -100,7 +116,7 @@ export interface ScopedHermesProvider {
 const provider: ScopedHermesProvider = {
   id: PROVIDER_ID,
   version: PROVIDER_VERSION,
-  capabilities: { sharedProfile: true },
+  capabilities: { sharedProfile: true, dataRetention: true },
   async open(ctx) {
     // Created before validation so a rejected open is still observable with
     // the host's trace id (or a generated one when the host did not supply it).
@@ -118,6 +134,8 @@ const provider: ScopedHermesProvider = {
         telemetry,
         completionLimits: ctx.completionLimits,
         tuning: ctx.tuning,
+        // Host governance requirement; structurally matched, no SDK import.
+        policy: ctx.policy,
       });
       return {
         providerId: PROVIDER_ID,

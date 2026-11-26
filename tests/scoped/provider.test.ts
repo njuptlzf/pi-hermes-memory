@@ -44,6 +44,11 @@ describe("scoped hermes provider descriptor", () => {
     // It must agree with what open() actually does with sharedRoot — otherwise
     // a provider would advertise a capability it silently drops.
     assert.equal(provider.capabilities?.sharedProfile, true);
+    // dataRetention: ctx.policy.dataRetentionDays reaches the session mirror
+    // prune (tests/scoped/session-maintenance.test.ts 7/8 are the behaviour
+    // side of this claim). A host product that opts into retention but picks
+    // a provider without this flag gets the mismatch warning, not silence.
+    assert.equal(provider.capabilities?.dataRetention, true);
 
     const shared = tempRoot("shared");
     const scope = tempRoot("scope");

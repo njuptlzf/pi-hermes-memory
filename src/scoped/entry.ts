@@ -117,6 +117,16 @@ export interface ScopedMemoryTuning {
    * `openScopedHermesMemory` users and tests.
    */
   readonly sessionSearch?: boolean;
+  /**
+   * Days to keep indexed session rows; maps to
+   * `config.sessionRetentionDays` (Chain A — the field exists upstream,
+   * default 0 = prune disabled; PR #36 shipped the prune, this makes the
+   * knob reachable without a raw `config` object). The agent-chat host
+   * injects the same policy through `ScopedHermesOptions.policy` instead —
+   * where both are present, `policy` wins (host governance outranks a
+   * caller knob). Design: agent-chat `docs/design/记忆数据保留政策设计稿.md`.
+   */
+  readonly retentionDays?: number;
 }
 
 export interface ScopedHermesOptions extends ScopedRootInput {
@@ -128,6 +138,16 @@ export interface ScopedHermesOptions extends ScopedRootInput {
    * explicitly to the review/flush mount.
    */
   readonly tuning?: ScopedMemoryTuning;
+  /**
+   * Host-declared data-governance requirements (agent-chat
+   * `MemoryPolicy`, structurally mirrored — no host SDK import). Currently
+   * one field: `dataRetentionDays`, folded into
+   * `config.sessionRetentionDays` below. Where `policy` and
+   * `tuning.retentionDays` disagree, `policy` wins: a host's governance
+   * outranks a caller knob. Absent policy = tuning/default, so host
+   * behaviour is unchanged until a product opts in.
+   */
+  readonly policy?: { readonly dataRetentionDays?: number };
   /** Inject the memory policy prompt on `before_agent_start`. Default: true. */
   readonly injectPrompt?: boolean;
   /**
@@ -232,6 +252,10 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
   // Default on; the only off path is an explicit `false` from a direct user
   // (the agent-chat host never passes tuning).
   const sessionSearchEnabled = tuning?.sessionSearch !== false;
+  // Retention: host policy outranks the caller tuning knob (see the config
+  // fold below and ScopedHermesOptions.policy). Undefined = leave whatever
+  // `options.config` / upstream default already provided.
+  const retentionDays = options.policy?.dataRetentionDays ?? tuning?.retentionDays;
   const config: MemoryConfig = {
     ...defaultMemoryConfig(),
     ...options.config,
@@ -248,6 +272,11 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
     // it at a mount site (contrast P4 §4.2.1 Chain B).
     ...(tuning?.standingInstructions !== undefined
       ? { standingInstructionsEnabled: tuning.standingInstructions } : {}),
+    // Chain A: retention maps to config.sessionRetentionDays (upstream field,
+    // default 0 = prune off). Source of truth order: host policy > caller
+    // tuning > raw config spread above > upstream default. The prune itself
+    // shipped in PR #36 (session-retention.ts); this is its reachability.
+    ...(retentionDays !== undefined ? { sessionRetentionDays: retentionDays } : {}),
     // The injected root wins over any `memoryDir` in `options.config`: allowing
     // both would let a caller misconfigure one tenant into another's directory.
     memoryDir: layout.memoryDir,
