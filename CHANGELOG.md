@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0-scoped.9] - 2026-11-27
+
+Fork-only prerelease. Published as `@njuptlzf/pi-hermes-memory` under `next`.
+
+### Added
+- **Host data-retention policy reachability (P6 §7, PR #42)**: `ProviderContext.policy` (structural mirror, zero imports like `history`) is forwarded to `openScopedHermesMemory`; a new `ScopedHermesOptions.policy` plus a `ScopedMemoryTuning.retentionDays` fallback fold into the upstream `config.sessionRetentionDays` (Chain A, same shape as the existing `reviewEveryTurns -> nudgeInterval` fold; `types.ts:142`). Precedence: host policy > caller tuning > raw config spread > upstream default 0. The provider declares `capabilities.dataRetention: true` — the C6 fact agent-chat warns against when a product names a retention policy the provider cannot keep. With no `policy` and no `tuning` the value stays `undefined` and the prune gate reads 0, so host behavior is unchanged until a product opts in. Tests: `tests/scoped/session-maintenance.test.ts` cases 7–8, `tests/scoped/provider.test.ts` descriptor pin; design record `docs/fork/P6-SESSION-MAINTENANCE-DESIGN.md` §7. Host-side contract (agent-chat `MemoryPolicy` + manifest `agent.memory.policy` + mismatch warning) landed in agent-chat PR #22.
+
+### Changed
+- `docs/fork/TASKS.md`: the host-reachability row graduates from "next (small PR)" to done; `WIRING-CONTRACT.md` §3 item 6 records the generality counterfactual the policy draft's two gates apply.
+
 ## [0.11.0-scoped.8] - 2026-11-25
 
 Fork-only prerelease. Published as `@njuptlzf/pi-hermes-memory` under `next`.
