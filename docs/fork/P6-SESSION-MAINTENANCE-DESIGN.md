@@ -295,7 +295,8 @@ agent-chat session.ts   resolveMemoryProvider(...).open({ ..., policy })
 | --- | --- |
 | `src/scoped/provider.ts` | `ProviderContext.policy?`; `capabilities.dataRetention`; forward `policy` at the `openScopedHermesMemory` call site |
 | `src/scoped/entry.ts` | `ScopedHermesOptions.policy?`; `ScopedMemoryTuning.retentionDays?`; `retentionDays` local + Chain A fold line |
-| `tests/scoped/session-maintenance.test.ts` | cases 7 (policy-only prune, no `config`) and 8 (policy> tuning, tuning-alone fallback) |
+| host side (agent-chat) | protocol `MemoryPolicy` + manifest `agent.memory.policy` + forwarding + mismatch warning (PR #22); dependency bump to the release carrying this section (PR #23); fake-product fixture declaration + `memory-policy-wiring.test.ts` end-to-end wiring check (PR #24) |
+| `tests/scoped/session-maintenance.test.ts` | cases 7 (policy-only prune, no `config`) and 8 (policy> tuning, tuning-alone fallback); case 9 (PR #46) adds the RETRIEVAL face: a verbatim `searchSessions()` probe finds both sessions before the window, only "recent" after the prune, "ancient" matches nothing — pinning that §7's "no longer retrievable" promise holds on the FTS surface the live tool reads, not just the header table (the `messages_ad` trigger is the mechanism; case 9 is the regression net if the prune is ever rewritten to bypass `messages`). Host wiring is deliberately NOT mirrored there: agent-chat reading this tenant's `sessions.db` would assume "providers have a SQLite mirror", which the §7 capability framing exists to forbid (provider-neutral port). |
 | `tests/scoped/provider.test.ts` | descriptor assertion for `dataRetention: true` |
 
 No upstream file touched; zero new `divergences.json` rows; the §2.2 gate and
