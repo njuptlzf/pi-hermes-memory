@@ -898,6 +898,16 @@
       "risk": "new",
       "anchors": [],
       "baseBlob": null
+    },
+    {
+      "path": "docs/fork/SESSION-REINDEX-DESIGN.md",
+      "status": "applied",
+      "surface": "fork documentation",
+      "change": "Design record for #18 (manual full-reindex surface): backfillScopedHistoryOnce wrapped with mode/retention options, per-tenant backfill gate, handle reindexSessions() + capabilities.sessionReindex; R2 (pruned-session resurrection guard) and R5 (started_at vs updatedAt signal) documented",
+      "reason": "Fork-owned file; never conflicts on merge. Written before implementation per UPSTREAM-MAPPING.md section 3.2; design-only — #18 stays 延后 in TASKS.md pending the host call surface (agent-chat repo slice, separate per WIRING-CONTRACT.md §5).",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
     }
   ]
 }
