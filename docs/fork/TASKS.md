@@ -219,8 +219,10 @@ live one. #4 residuals D (recovery sidecar convergence) and A (bounded retention
 prune) are implemented 2026-11-26 per `P6-SESSION-MAINTENANCE-DESIGN.md` —
 both fork-owned, default behavior unchanged. `session_files` materialisation and
 orphan review-session cleanup remain unneeded: their capabilities are covered by
-the backfill cursor + reconcile. The remaining 延后 count is 5: #1, #2, #4
-(the two covered tails only), #11, #12, #18. #8 landed in two PRs per the design's §9 split:
+the backfill cursor + reconcile. The remaining 延后 rows are #1, #2, #4
+(the two covered tails only, both judged unneeded), #11, #12, #18 — six numbered
+rows, but only five actionable work items since #4's tails need no work. #8 landed
+in two PRs per the design's §9 split:
 **PR #21** fixed D1 (the section was injected twice on the agent-chat path) and
 folded in R8's `reviewEnabled` port gap — same defect class, a policy switch a
 provider-loaded host could not reach; **PR #22** wired user-level standing
