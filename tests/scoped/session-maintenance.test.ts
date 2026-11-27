@@ -6,6 +6,7 @@ import * as path from "node:path";
 import { openScopedHermesMemory, type ScopedHermesHandle } from "../../src/scoped/entry.js";
 import type { MemoryHistoryPort, MemorySessionSummary } from "../../src/scoped/history-types.js";
 import { DatabaseManager } from "../../src/store/db.js";
+import { searchSessions } from "../../src/store/session-search.js";
 
 /**
  * #4 session maintenance (P6-SESSION-MAINTENANCE-DESIGN.md).
@@ -145,6 +146,20 @@ function waitFor(predicate: () => boolean, timeoutMs = 4000): Promise<void> {
   return tick();
 }
 
+/**
+ * Retrieval-face probe: the session ids whose INDEXED MESSAGES still match a
+ * query after maintenance ran. Complements `sessionIds` (which reads the
+ * session header table) — the policy promise is phrased as "no longer
+ * retrievable", so the FTS5 surface `session_search` actually reads is the
+ * assertion that closes the retention × search interaction (§7.2).
+ */
+function searchableIds(handle: ScopedHermesHandle, query: string): string[] {
+  const db = new DatabaseManager(handle.layout.memoryDir);
+  try {
+    return [...new Set(searchSessions(db, query).map((r) => r.sessionId))].sort();
+  } finally { db.close(); }
+}
+
 describe("#4 A — retention prune (§7)", () => {
   // `recent` must be computed from NOW, never a hardcoded calendar date: the
   // prune cutoff is Date.now()-based, so a literal like 2026-11-26 sits inside
@@ -258,5 +273,32 @@ describe("#4 A — retention prune (§7)", () => {
     await handle.ready;
     await waitFor(() => sessionIds(handle).length === 1);
     assert.deepEqual(sessionIds(handle), ["recent"], "tuning fallback must prune");
+  });
+
+  it("9 — the pruned session is also NOT retrievable via the search index", async () => {
+    // §7 reachability's promise is phrased on the RETRIEVAL surface ("sessions
+    // older than the window are no longer retrievable from the memory layer"),
+    // and retention × search was tested only module-internally: the prune
+    // deletes `messages` rows, and message_fts stays consistent because
+    // `messages_ad` deletes the index entry in the same transaction
+    // (schema.ts:64-66). Assert it end to end on a real tenant instead of
+    // trusting the trigger: before the prune BOTH sessions answer a verbatim
+    // query, after it ONLY "recent" does.
+    const p = retentionPort(rows());
+    const root = tempRoot("search-after-prune");
+    let handle = openTenant({ storageRoot: root, history: p });
+    await handle.ready;
+    await waitFor(() => sessionIds(handle).length === 2);
+    // The mirror indexed each session's one message ("… verbatim").
+    assert.deepEqual(searchableIds(handle, "verbatim"), ["ancient", "recent"],
+      "fixture: both sessions retrievable while inside the window");
+
+    handle = await remountWithRetention(root, p, 1);
+    await handle.ready;
+    await waitFor(() => sessionIds(handle).length === 1);
+    assert.deepEqual(searchableIds(handle, "verbatim"), ["recent"],
+      "pruned session must be gone from the FTS surface, not just the header table");
+    assert.deepEqual(searchableIds(handle, "ancient"), [],
+      "and its own wording must no longer match anything");
   });
 });
