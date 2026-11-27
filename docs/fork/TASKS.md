@@ -159,7 +159,7 @@ it is deliberate rather than lost work — see `docs/fork/WIRING-RATIONALE.md`.
 | 15 | `/learn-memory-tool` | command teaching the memory tools | not registered | host can put this in its own docs/prompt |
 | 16 | `/memory-sync-markdown` | repair command syncing Markdown into SQLite | not registered; scoped seeds the mirror on every open instead | whether a manual repair path is still needed |
 | 17 | `/memory-preview-context` | command previewing the exact injected context | not registered | host-side debug surface, if any |
-| 18 | `/memory-index-sessions` | manual session indexing command | not registered | depends on row 4 |
+| 18 | `/memory-index-sessions` | manual session indexing command (upstream's unbounded `indexAllSessions`, distinct from the bounded auto-backfill) | not registered; scoped's `startScopedHistoryBackfill` covers the **auto/incremental** path only (cursor=`updatedAt`, 50/open cap), not the manual full-reindex path | TUI command is inert in rpc; needs a host call surface like #12. #3/#4 (session source) already landed — the old "nothing to index" blocker is void |
 | 19 | Prompt modes | `memoryMode:"legacy-inject"`, policy styles `full/compact/custom/none`, full `<memory-context>` block | scoped always uses `buildScopedMemoryPolicy()` + shared profile + retrieval block | host assembles its own prompt; verify which block is legal |
 | 20 | Startup migration / repair | extension-root migration, legacy project-dir migration, skill migration, Markdown→SQLite sync | no migration commands; only per-open mirror reconciliation | tenant roots are host-computed; upstream legacy paths may not exist |
 | 21 | Provider option passthrough | `injectPrompt`, `autoRetrieve`, `retrievalBudget`, `profilePromptChars`, review turn/message budgets | supported by `openScopedHermesMemory()` but absent from `ProviderContext`/`provider.open()` | host-neutral way to expose tuning without leaking upstream config |
@@ -201,7 +201,7 @@ but it is not scheduled; "延后" means an external prerequisite is missing;
 | 15 | 不做 | Usage guidance belongs in host docs/prompt; no command needed. |
 | 16 | 不做 | Scoped already reconciles the FTS5 mirror on every open, so the repair command has no gap to fill. |
 | 17 | 不做 | The host can inspect the injected text by calling `promptSection()` directly. |
-| 18 | 延后 | Depends on #3–#4; without a per-scope session source there is nothing to index. |
+| 18 | 延后（仅缺 host 触发面） | #3/#4 landed, so a per-scope session source exists — the old "nothing to index" rationale is void. Two upstream indexing paths are **not** redundant with each other: `scheduleSessionBackfill` = incremental + 50/open cap, `/memory-index-sessions` = unbounded `indexAllSessions` full reindex (still maintained in upstream 0.11.0, no deprecation). Scoped wired only the former; the latter's "force a full reindex in one shot" need survives here (same 50/open cap). A `registerCommand` is inert in rpc, so this needs a host call surface (cf. #12) — a contract/port item, not a deletion. |
 | 19 | 不做 | The host assembles its own prompt; `legacy-inject` conflicts with `selfInjects:false` and raises token/isolation risk. |
 | 20 | 不做 | Tenant roots are host-computed, so upstream legacy migration sources do not exist; mirror reconciliation is the repair path. |
 | 21 | **DONE 2026-11-23** | `ScopedMemoryTuning` on `ScopedHermesOptions` + `ProviderContext.tuning`; config-mapped fields fold into `MemoryConfig`, additive knobs (`nudgeMode`, `minUserTurnsBeforeReview`) are passed explicitly at the mount (design §4.2.1) |
