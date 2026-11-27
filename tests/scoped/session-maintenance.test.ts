@@ -146,10 +146,19 @@ function waitFor(predicate: () => boolean, timeoutMs = 4000): Promise<void> {
 }
 
 describe("#4 A — retention prune (§7)", () => {
-  const rows = () => [
-    { id: "ancient", updatedAt: "2020-01-01T00:00:00Z", headerAt: "2020-01-01T00:00:00Z" },
-    { id: "recent", updatedAt: "2026-11-26T00:00:00Z", headerAt: "2026-11-26T00:00:00Z" },
-  ];
+  // `recent` must be computed from NOW, never a hardcoded calendar date: the
+  // prune cutoff is Date.now()-based, so a literal like 2026-11-26 sits inside
+  // a 1-day window only until the real clock passes it — a time-bomb that made
+  // cases 5–8 fail in CI one day after PR #42 merged (2026-11-27). 6 hours old
+  // is inside every retention window the cases use (1 day, and 3650 days for
+  // the no-prune precedence assertion) and still a distinct session file.
+  const rows = () => {
+    const fresh = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+    return [
+      { id: "ancient", updatedAt: "2020-01-01T00:00:00Z", headerAt: "2020-01-01T00:00:00Z" },
+      { id: "recent", updatedAt: fresh, headerAt: fresh },
+    ];
+  };
 
   it("4 — default (no retention config) keeps every session across re-open", async () => {
     const p = retentionPort(rows());
