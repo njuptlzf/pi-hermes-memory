@@ -38,7 +38,9 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { StringEnum } from "@earendil-works/pi-ai";
-import { isDatabaseClosedError, type DatabaseManager } from "../store/db.js";
+import type { DatabaseManager } from "../store/db.js";
+import { isDatabaseClosedError } from "../store/db.js";
+import type { ScopedBackfillGate } from "./backfill-gate.js";
 import type { MemoryHistoryPort } from "./history-types.js";
 import { getIndexedMessageCount, searchSessions } from "../store/session-search.js";
 import { indexCurrentSession } from "../store/session-indexer.js";
@@ -290,13 +292,82 @@ function validHistoryHeader(entry: unknown): entry is { id: string; timestamp: s
  * loaded when its `updatedAt` changed; a failed/missing load leaves the cursor
  * alone so the next open retries. Reconcile uses the port's authoritative
  * id set — the current live session is unconditionally protected (B5).
+ *
+ * #18 (SESSION-REINDEX-DESIGN.md §2.1): the same walk serves a manual FULL
+ * pass via `options.mode` — cursor-equality skip bypassed, unbounded budget,
+ * retention guard enforced so a reindex never re-adds pruned content (R2).
+ * Defaults reproduce today's incremental behavior exactly (R1).
  */
+export interface BackfillPassOptions {
+  /** full = bypass the cursor equality-skip for one pass, unbounded budget. */
+  mode?: "incremental" | "full";
+  /** ms cutoff from retentionCutoffMs(config.sessionRetentionDays); 0 = off. */
+  retentionCutoffMs?: number;
+}
+
+/** Stats of one backfill pass (SESSION-REINDEX-DESIGN.md §2.2). Structurally
+ *  compatible with upstream's BulkIndexResult (fact 7). */
+export interface SessionBackfillStats {
+  sessionsProcessed: number;
+  /** Sessions whose index actually gained rows this pass (IndexResult.skipped
+   *  false with messages, or first-time indexing). */
+  sessionsIndexed: number;
+  /** Incremental mode only: cursor-equal sessions not re-loaded. */
+  sessionsSkipped: number;
+  /** Full mode only: outside the retention window — never re-added (R2). */
+  expiredSkipped: number;
+  messagesIndexed: number;
+  errors: string[];
+  /** Incremental mode hit the per-open budget; always false for a full pass. */
+  reachedLimit: boolean;
+  /** Teardown (dispose/erase) stopped the pass; cursor/reconcile state intact. */
+  aborted: boolean;
+}
+
+/**
+ * Retention-window check for a pass timestamp. Mirrors the semantics of
+ * upstream's private mtime-based `isWithinRetention` (`session-indexer.ts:70`,
+ * applied in `indexAllSessions`/`indexChangedSessions`): identical numeric
+ * comparison, only the signal source differs (port `updatedAt` vs file mtime,
+ * the documented R5 caveat). NaN (corrupt `updatedAt`) counts as WITHIN —
+ * conservative toward recall, and a known-expired session never reaches this
+ * arm with a NaN (R6).
+ */
+export function isWithinRetentionMs(valueMs: number, cutoffMs: number): boolean {
+  if (cutoffMs <= 0) return true;
+  if (!Number.isFinite(valueMs)) return true;
+  return valueMs >= cutoffMs;
+}
+
+function emptyStats(): SessionBackfillStats {
+  return {
+    sessionsProcessed: 0, sessionsIndexed: 0, sessionsSkipped: 0,
+    expiredSkipped: 0, messagesIndexed: 0, errors: [],
+    reachedLimit: false, aborted: false,
+  };
+}
+
 export async function backfillScopedHistoryOnce(
   dbManager: DatabaseManager,
   history: MemoryHistoryPort,
   currentSessionId: () => string | null,
   isDisposed: () => boolean = () => false,
-): Promise<void> {
+  options: BackfillPassOptions = {},
+): Promise<SessionBackfillStats> {
+  const mode = options.mode ?? "incremental";
+  const cutoff = options.retentionCutoffMs ?? 0;
+  const stats = emptyStats();
+  // R7 guard points: dispose/erase can land while this pass is awaiting
+  // history.list()/load() — a minutes-long full pass (R4) makes that window
+  // real. Checked at entry, after every awaited load, and before the final
+  // writes, so teardown yields `aborted:true` stats instead of a closed-DB
+  // throw punching through withCorruptionRecovery (the kickoff catch treats
+  // that as teardown noise and swallows it — the same outcome, minus the
+  // rejection a direct reindexSessions() caller must not see).
+  if (isDisposed()) {
+    stats.aborted = true;
+    return stats;
+  }
   const db = dbManager.getDb();
   const cursor = readBackfillCursor(db);
   const sessions = await history.list(); // failure propagates to start's catch
@@ -304,11 +375,37 @@ export async function backfillScopedHistoryOnce(
   let budget = 0;
 
   for (const s of sessions) {
-    if (isDisposed()) return; // B4: no writes into a released handle
-    if (budget++ >= BACKFILL_SESSIONS_PER_OPEN) break;
-    if (cursor[s.sessionId] === s.updatedAt) continue;
+    if (isDisposed()) {
+      stats.aborted = true;
+      return stats; // B4: no writes into a released handle (cursor/reconcile untouched)
+    }
+    if (mode === "incremental" && budget++ >= BACKFILL_SESSIONS_PER_OPEN) {
+      stats.reachedLimit = true;
+      break;
+    }
+    // R2 load-bearing guard — BOTH modes (drift fix found in implementation):
+    // upstream's incremental path applies retention too (`indexChangedSessions`
+    // passes the cutoff, session-indexer.ts:470); a session pruned-or-never-
+    // indexed but still listed must never land on the retrieval face when the
+    // tenant runs with retention. cutoff 0 (the default) keeps this fully off,
+    // so behavior is unchanged for tenants without a retention policy.
+    // Cursor untouched here — entries keep their last known updatedAt so the
+    // incremental skip still works next open (§2.1 non-deletion rule).
+    if (cutoff > 0 && !isWithinRetentionMs(Date.parse(s.updatedAt), cutoff)) {
+      stats.expiredSkipped++;
+      continue;
+    }
+    if (mode === "incremental" && cursor[s.sessionId] === s.updatedAt) {
+      stats.sessionsSkipped++;
+      continue;
+    }
+    stats.sessionsProcessed++;
 
     const entries = await history.load(s.sessionId);
+    if (isDisposed()) {
+      stats.aborted = true;
+      return stats; // teardown landed mid-await
+    }
     if (!entries) continue; // B6: undefined = not yet indexable, retry next open
     const header = entries.find(validHistoryHeader);
     if (!header) {
@@ -319,8 +416,10 @@ export async function backfillScopedHistoryOnce(
       getHeader: () => header,
       getEntries: () => entries.filter((e) => e !== header),
     };
-    dbManager.withCorruptionRecovery(() =>
+    const result = dbManager.withCorruptionRecovery(() =>
       indexCurrentSession(dbManager, snapshot as Parameters<typeof indexCurrentSession>[1]));
+    if (result && !result.skipped) stats.sessionsIndexed++;
+    stats.messagesIndexed += result?.messagesIndexed ?? 0;
     cursor[s.sessionId] = s.updatedAt;
   }
 
@@ -341,12 +440,17 @@ export async function backfillScopedHistoryOnce(
     for (const id of deleted) delete cursor[id];
   }
   writeBackfillCursor(dbManager.getDb(), cursor);
+  return stats;
 }
 
 /**
  * Fire-and-forget after `ready`, deliberately not awaited by mount/prompt.
  * Real failures take the same best-effort channel as live indexing; a closed
  * DB is teardown noise and is skipped there.
+ *
+ * #18: when a gate is provided, an open-time pass DROPS itself (returns
+ * silently) if a manual reindex already holds the slot — lossless, because
+ * the in-flight pass writes the same cursor rows (SESSION-REINDEX-DESIGN.md §2.3).
  */
 export function startScopedHistoryBackfill(
   dbManager: DatabaseManager,
@@ -354,10 +458,62 @@ export function startScopedHistoryBackfill(
   isReady: Promise<void>,
   currentSessionId: () => string | null,
   isDisposed: () => boolean,
+  gate: ScopedBackfillGate,
+  retentionCutoff: number,
 ): Promise<void> {
+  // The retention guard applies to the open-time pass too (implementation-time
+  // drift fix, 2026-11-28): upstream's incremental entry `indexChangedSessions`
+  // passes the cutoff too (session-indexer.ts:470), and a fresh cursor would
+  // otherwise index a past-window session on a tenant's very first open — the
+  // cursor-skip interlock (P6 §2.3) only protects sessions seen before.
+  // cutoff 0 (retention off) keeps behavior byte-identical to before.
   return isReady
-    .then(() => backfillScopedHistoryOnce(dbManager, history, currentSessionId, isDisposed))
+    .then(() => gate.run(() =>
+      backfillScopedHistoryOnce(dbManager, history, currentSessionId, isDisposed, {
+        retentionCutoffMs: retentionCutoff,
+      }),
+    ))
+    .then(() => undefined)
     .catch((error: unknown) => reportScopedIndexFailure(error));
+}
+
+/**
+ * One manual full-reindex pass (backlog #18 handle method). Priority gate
+ * claim: chains after an in-flight open pass instead of dropping (§2.3).
+ */
+export async function reindexScopedHistory(
+  dbManager: DatabaseManager,
+  history: MemoryHistoryPort,
+  currentSessionId: () => string | null,
+  retentionCutoff: number,
+  gate: ScopedBackfillGate,
+  isDisposed: () => boolean,
+): Promise<SessionBackfillStats> {
+  // A real failure inside the pass (history.list() down, closed DB) is reported
+  // through `errors`/`aborted`, NOT rejected: a manual reindex is host-facing and
+  // returns the same SessionBackfillStats shape whether it succeeded, aborted or
+  // errored. Only the pre-gate guard rejections (no session search / no history
+  // port, thrown in entry.ts before this call) reach a caller as throws.
+  try {
+    const result = await gate.run(
+      () => backfillScopedHistoryOnce(dbManager, history, currentSessionId, isDisposed, {
+        mode: "full",
+        retentionCutoffMs: retentionCutoff,
+      }),
+      { priority: true },
+    );
+    if (result === null) {
+      // Unreachable: priority claims never drop. Surface an honest error rather
+      // than silently claiming an empty pass if that invariant ever breaks.
+      return { ...emptyStats(), errors: ["backfill gate dropped a priority pass"] };
+    }
+    return result;
+  } catch (error) {
+    if (isDatabaseClosedError(error)) {
+      return { ...emptyStats(), aborted: true };
+    }
+    return { ...emptyStats(), errors: [String(error).slice(0, 200)] };
+  }
 }
 
 /**
