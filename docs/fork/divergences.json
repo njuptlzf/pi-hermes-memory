@@ -908,6 +908,36 @@
       "risk": "new",
       "anchors": [],
       "baseBlob": null
+    },
+    {
+      "path": "skills/memory-wiring-design/SKILL.md",
+      "status": "applied",
+      "surface": "fork-owned agent skill",
+      "change": "Fork-side wiring decision skill: four-question framework (feasible / worth / source-safe / scenario), fork config enablement, design-record contract, cross-reference to agentchat-plugin-wiring",
+      "reason": "Fork-owned file; canonical copy lives in the repo's skills/ so any agent can read it; .workbuddy/skills/ holds only a local junction for WorkBuddy discovery. Never conflicts on merge.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "skills/memory-wiring-design/fork-landing.md",
+      "status": "applied",
+      "surface": "fork-owned agent skill",
+      "change": "Fork enablement reference: ScopedMemoryTuning / policy / capabilities / layout surfaces, design-record four elements, divergences/CI gate, worked scenario",
+      "reason": "Fork-owned support file for the memory-wiring-design skill; never conflicts on merge.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "skills/memory-wiring-design/wiring-verdict.md",
+      "status": "applied",
+      "surface": "fork-owned agent skill",
+      "change": "Shared verdict framework: forced/drift/additive classification, counterfactual gate, C6 triad, stale verdicts, merge-conflict avoidance",
+      "reason": "Fork-owned support file for the memory-wiring-design skill; never conflicts on merge.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
     }
   ]
 }
