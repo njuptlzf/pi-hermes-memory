@@ -10,6 +10,11 @@ capability from an upstream memory engine into a multi-tenant fork. Worked examp
 `hermes-memory` (scoped fork of `pi-hermes-memory`). It is **not** for wiring a
 plugin into the agent-chat platform — that is `agentchat-plugin-wiring`.
 
+**Terminal output: a wiring design record.** A successful run does not stop at a
+verdict — it produces `docs/fork/<TOPIC>-DESIGN.md` using
+[design-record-template.md](design-record-template.md), plus a pointer in
+`docs/fork/TASKS.md`. The four questions below feed that record's sections.
+
 ## When to invoke
 
 - "Should we wire X?" / "what's the next unwired upstream capability?"
@@ -62,8 +67,24 @@ Enablement: <config knob / port field / handle method + file:line>
 - **Status** lives in `docs/fork/TASKS.md`, not here. When asked "what's next",
   answer only from that tracker.
 
+## Production flow (to the design record)
+
+1. Read `docs/fork/TASKS.md` for the candidate's current verdict and prerequisites.
+2. Answer Q1–Q4 with `file:line` evidence (use the code graph, not guesses).
+3. Decide the enablement knob and locate its consumer site.
+4. Write `docs/fork/<TOPIC>-DESIGN.md` from
+   [design-record-template.md](design-record-template.md). Re-check every
+   `file:line` **after** writing (§8 of the template).
+5. Add a `divergences.json` row for the new file in the same PR.
+6. Add a pointer in `docs/fork/TASKS.md` (status stays 延后/design-only until
+   implementation lands).
+7. PR base/head both `njuptlzf/pi-hermes-memory`; `npm run upstream:check:ci`
+   must be green before merge.
+
 ## References
 
+- [design-record-template.md](design-record-template.md) — **the output contract**:
+  required sections, question→section map, completion checklist. Load before writing.
 - [wiring-verdict.md](wiring-verdict.md) — forced/drift/additive, counterfactual
   gate, C6 triad, stale verdicts, merge-conflict avoidance. Read when judging Q2/Q3.
 - [fork-landing.md](fork-landing.md) — config enablement, design-record contract,
