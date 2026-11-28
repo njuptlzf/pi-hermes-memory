@@ -41,6 +41,13 @@ Numbered facts; for each upstream candidate classify:
 - **unforced drift** (copied default / unread config) → defect, delete it;
 - **additive** (new option in fork-owned type) → allowed, document why.
 Every fact carries a locator; no "we believe" / "probably".
+**Guard/threshold porting: enumerate the upstream sites that apply it.** When a
+record reuses an upstream guard (retention cutoff, cap, budget), list EVERY
+upstream entry point that applies it — a full-reindex path and an incremental
+path often share one guard. State per-mode coverage explicitly: #18 attached
+its retention guard to the new full mode only, and the implementation tests
+exposed that upstream's incremental `indexChangedSessions` applies the cutoff
+too (a fresh cursor would otherwise index past-window content on first open).
 
 ## 2. Call chain — exact code shapes
 Real TypeScript shapes, including fields that bypass the normal config object
@@ -50,6 +57,12 @@ New modules: full export signature. Config mapping: name the upstream field
 upstream config field exists.
 **Enablement**: which knob turns this on (`ScopedMemoryTuning` / `ctx.policy` /
 `ctx.history` / `capabilities` / `layout`), with `file:line`, and where it is read.
+**Async barrier ordering is part of the code shape.** A handle action method
+that reads tenant state populated by an async load (capacity, cursors, mirrors)
+must state its relation to the `ready` barrier in the record — a `compact()`
+style call that measures capacity before the disk load silently misreads an
+unloaded tenant as empty-and-healthy (found at implementation on #12, absent
+from the record).
 
 ## 3. Impact surface — every file and every caller
 | File | Change | Ownership |
@@ -66,6 +79,13 @@ justify as additive. Include teardown/concurrency and best-effort discipline.
 Numbered cases with real assertions; **time anchors relative** (`now-6h`),
 never literal calendar dates (a fixture that goes stale is a CI time-bomb).
 State which face is probed (e.g. `searchSessions` for retrievability).
+**Pin every test precondition to the config default it depends on.** Before
+writing a case, read the defaults the precondition needs: #12's overflow case
+failed twice because `memoryMode` defaults to `policy-only` (capacity cap not
+enforced — an `add` never fails) and the fixture was measured against a 120-char
+limit while the provider path ships the 5000-char default (no-op pass). The
+record should name the enforcing config key per precondition case, not let the
+implementer discover it by debugging red tests.
 
 ## 6. Ship order
 Design → implementation (fails-then-passes) → `npm run check` → targeted tests
@@ -77,7 +97,10 @@ Fork record declares what it needs; host-side wiring detail belongs to the
 agent-chat repo (WIRING-CONTRACT.md §5). Show the ctx fold chain, capability
 boolean, precedence (policy > tuning), and the layering rule: host verifies
 declaration→ctx crossing, provider verifies behavior — never host reading
-provider internals.
+provider internals. When the handle name and the port name are deliberately
+different layers (`reindexSessions()` handle vs `reindexHistory()` port), say
+so in the mapping comment at the forward site — otherwise the next reader
+files it as the naming drift this process exists to prevent (#18).
 
 ## 8. Cross-references checked (after writing)
 | Claim | Source | Verified |
@@ -92,6 +115,11 @@ Re-check line numbers **after** writing; a stale anchor is a review finding.
 - [ ] Q3 upstream files touched = none; divergences rows enumerated.
 - [ ] §2 enablement knob named and its consumer site located.
 - [ ] §5 time anchors relative, not calendar dates.
+- [ ] §5 each precondition case names the config default it relies on (cap
+      enforcement, limits) — verified by reading the config source, not assumed.
+- [ ] §1 guard/threshold ports enumerate every upstream site that applies the
+      guard (incremental AND full paths); per-mode coverage stated.
+- [ ] §2 handle action methods state their relation to the async load barrier.
 - [ ] §8 every `file:line` re-verified after writing.
 - [ ] New file gets a `divergences.json` row in the same PR (CI gate).
 - [ ] Host-side record read and cross-checked (if one exists or is planned):
