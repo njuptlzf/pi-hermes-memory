@@ -948,6 +948,16 @@
       "risk": "new",
       "anchors": [],
       "baseBlob": null
+    },
+    {
+      "path": "docs/fork/MEMORY-COMPACT-DESIGN.md",
+      "status": "applied",
+      "surface": "fork documentation",
+      "change": "Design record for #18 sibling #12: handle compact() reusing consolidateViaCompletion over memory+failure targets, per-tenant background-gate hoist, within-goal no-op guard, deferred/skipped semantics; R2 one-prompt shrink ceiling with re-call progress stated as mechanism-local",
+      "reason": "Fork-owned file; never conflicts on merge. Written before implementation per UPSTREAM-MAPPING.md section 3.2; design-only — #12 stays 延后 pending the host call surface (agent-chat 记忆维护动作端口设计稿.md slice).",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
     }
   ]
 }

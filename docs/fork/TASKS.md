@@ -153,7 +153,7 @@ it is deliberate rather than lost work — see `docs/fork/WIRING-RATIONALE.md`.
 | 9 | `/memory-pin` | command to pin/list/remove standing instructions | not registered | `registerCommand` is a no-op in rpc mode; need a tool/port instead |
 | 10 | `/memory-insights` | command showing stored memory inventory | not registered | host-side equivalent, if any |
 | 11 | `/memory-skills` | command listing procedural skills | not registered | depends on rows 1–2 |
-| 12 | `/memory-consolidate` | manual consolidation trigger | not registered; automatic consolidation exists only with `complete` | host-triggered alternative to a TUI command |
+| 12 | `/memory-consolidate` | manual consolidation trigger (upstream `registerConsolidateCommand`, one pass per store target) | not registered; scoped's auto consolidation runs only via the injected `complete` AND only when overflow hits with no grace window active — the overflow error itself tells the writer to consolidate manually, but no manual surface exists in rpc | TUI command is inert in rpc; needs a host call surface (cf. #18). Design: `MEMORY-COMPACT-DESIGN.md` |
 | 13 | `/memory-interview` | onboarding interview pre-filling the profile | not registered | onboarding ownership in the host |
 | 14 | `/memory-switch-project` | list/switch project memories | not registered | moot while row 7 is absent |
 | 15 | `/learn-memory-tool` | command teaching the memory tools | not registered | host can put this in its own docs/prompt |
@@ -195,7 +195,7 @@ but it is not scheduled; "延后" means an external prerequisite is missing;
 | 9 | 不做 | `registerCommand` is a no-op in rpc mode; if #8 lands, authoring belongs to a host/user-side surface, not an agent tool. |
 | 10 | 不做 | The host can read memory files or use existing search; a TUI command has no rpc value. |
 | 11 | 延后 | Depends on #1–#2; no skill store means no inventory to list. |
-| 12 | 延后 | Automatic consolidation already covers capacity. A manual trigger needs a host call surface, not a TUI command. |
+| 12 | 延后（仅缺 host 触发面） | **Design record: `docs/fork/MEMORY-COMPACT-DESIGN.md`** (2026-11-28, design-only). The old "auto consolidation covers capacity" rationale is weakened by code: the overflow grace window (`memory-store.ts:173-176`) deliberately DEFERS the auto path and tells the writer to "consolidate manually first" — in a host that instruction is a dead letter (upstream's `/memory-consolidate` is an inert rpc `registerCommand`, its heavy path spawns). Fork slice = handle `compact()` reusing `consolidateViaCompletion` (targets memory+failure only; profile never consolidated per `entry.ts:543-545`), background gate hoisted to per-tenant. Host naming `compact`/`capabilities.memoryCompaction` already fixed in agent-chat `记忆维护动作端口设计稿.md`; that record's compact assertion face was corrected 2026-11-28 (promptSection does not carry memory bodies — capacity face instead). |
 | 13 | 不做 | Onboarding belongs to the host/product; the command is inert in rpc. |
 | 14 | 不做 | Depends on the already-excluded #7. |
 | 15 | 不做 | Usage guidance belongs in host docs/prompt; no command needed. |
