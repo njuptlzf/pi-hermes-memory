@@ -813,7 +813,7 @@
       "path": "src/scoped/session-search.ts",
       "status": "applied",
       "surface": "session search (scoped #3)",
-      "change": "fork-owned tool wrapper + live turn/shutdown indexing; reuses upstream's pure searchSessions/getIndexedMessageCount/indexCurrentSession",
+      "change": "fork-owned tool wrapper + live turn/shutdown indexing; reuses upstream's pure searchSessions/getIndexedMessageCount/indexCurrentSession. #18: backfillScopedHistoryOnce gains BackfillPassOptions (mode full/incremental) + SessionBackfillStats return + R2 retention guard in BOTH modes (drift fix: upstream indexChangedSessions applies the cutoff too, so the open-time kickoff now passes it); new reindexScopedHistory full pass + isWithinRetentionMs helper; startScopedHistoryBackfill takes the per-tenant gate + cutoff",
       "reason": "upstream's session-search-tool.ts evaluates AGENT_ROOT at import time (paths.ts:5), which violates the scoped boundary; forced reimplementation per SESSION-SEARCH-DESIGN.md §1 item 3 / R1. Tool wording is scoped to the current session (§4.2).",
       "risk": "new",
       "anchors": [],
@@ -975,6 +975,26 @@
       "surface": "scoped compaction tests",
       "change": "10 cases per MEMORY-COMPACT-DESIGN.md §5: over-goal shrink, within-goal free noop, no-completion skip, deferral, overflow-grace recovery loop (legacy-inject cap), profile untouched, requireShrink mapping, disposed abort, descriptor pin, MaintenanceResult port mapping without content",
       "reason": "fork-owned coverage for the #12 slice",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "src/scoped/backfill-gate.ts",
+      "status": "applied",
+      "surface": "scoped backfill gate",
+      "change": "createScopedBackfillGate: per-tenant serial queue; non-priority claims drop when busy (open pass, lossless by cursor argument), priority claims chain (manual reindex never dropped); generic over pass result to avoid the session-search type cycle",
+      "reason": "Fork-owned (SESSION-REINDEX-DESIGN.md §2.3). Mirrors upstream's module-global sessionBackfillState.inProgress, per-tenant instead — a global would let one tenant starve another.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "tests/scoped/session-reindex.test.ts",
+      "status": "applied",
+      "surface": "scoped reindex tests",
+      "change": "11 cases per SESSION-REINDEX-DESIGN.md §5: full-pass cursor bypass, row idempotency, cursor survival + reopen skip, R2 retention guard both modes, gate chaining, guard rejections, R7 abort (function-level), NaN conservatism, reconcile protection, descriptor pin, MaintenanceResult port mapping",
+      "reason": "fork-owned coverage for the #18 slice",
       "risk": "new",
       "anchors": [],
       "baseBlob": null

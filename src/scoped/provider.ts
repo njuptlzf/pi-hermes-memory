@@ -94,6 +94,13 @@ interface ProviderSession {
     readonly skipped?: boolean;
     readonly deferred?: boolean;
   }>;
+  /** Same MaintenanceResult mapping for the reindex action (§2.4 cross-check). */
+  reindexHistory(): Promise<{
+    readonly affected: number;
+    readonly errors: readonly string[];
+    readonly skipped?: boolean;
+    readonly deferred?: boolean;
+  }>;
 }
 
 /**
@@ -122,6 +129,14 @@ export interface ScopedHermesProviderCapabilities {
    * per-target detail stays on the handle for direct users.
    */
   readonly memoryCompaction?: boolean;
+  /**
+   * true = honours `session.reindexHistory()` (SESSION-REINDEX-DESIGN.md): a
+   * full one-shot rebuild of the per-scope session mirror from ctx.history,
+   * retention-guarded at call time. Named with the HOST's capability word —
+   * the host record owns the vocabulary; this replaces the record's early
+   * `sessionReindex` drift (unified 2026-11-28, agent-chat PR #30).
+   */
+  readonly historyReindex?: boolean;
 }
 
 export interface ScopedHermesProvider {
@@ -135,7 +150,7 @@ export interface ScopedHermesProvider {
 const provider: ScopedHermesProvider = {
   id: PROVIDER_ID,
   version: PROVIDER_VERSION,
-  capabilities: { sharedProfile: true, dataRetention: true, memoryCompaction: true },
+  capabilities: { sharedProfile: true, dataRetention: true, memoryCompaction: true, historyReindex: true },
   async open(ctx) {
     // Created before validation so a rejected open is still observable with
     // the host's trace id (or a generated one when the host did not supply it).
@@ -180,6 +195,26 @@ const provider: ScopedHermesProvider = {
             ...(r.skipped !== undefined ? { skipped: true } : {}),
             ...(r.deferred ? { deferred: true } : {}),
           };
+        },
+        // SESSION-REINDEX-DESIGN.md §2.4 mapping: sessionsIndexed = rows the
+        // walk actually gained (re-INDEXing an unchanged mirror legitimately
+        // reports affected 0 — the pass still ran and reconciled); errors carry
+        // the stats failure texts plus a stable note when the guards rejected.
+        // Host names the action `reindexHistory`; the handle keeps `reindexSessions`.
+        reindexHistory: async () => {
+          try {
+            const stats = await tenant.reindexSessions();
+            return {
+              affected: stats.sessionsIndexed,
+              errors: stats.errors,
+              ...(stats.aborted ? { deferred: true } : {}),
+            };
+          } catch (error) {
+            // Guard rejections (no session search / no history port) are a
+            // precondition miss for the host, not a crash: MaintenanceResult
+            // has no content field anyway, so surface the stable code only.
+            return { affected: 0, errors: [String(error).slice(0, 200)], skipped: true };
+          }
         },
       };
     });

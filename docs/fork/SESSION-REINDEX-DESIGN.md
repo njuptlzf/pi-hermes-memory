@@ -253,6 +253,17 @@ export function createScopedBackfillGate(ready: Promise<void>): {
   busy (today the situation cannot occur; tomorrow it means "a reindex is
   already walking — its cursor writes cover what the open pass would do", so
   dropping the incremental pass is safe, not lossy).
+- **Implementation-time drift fixes (2026-11-28, found by the §5 tests):**
+  (1) the R2 retention guard applies to the INCREMENTAL open pass too, not
+  only full mode — upstream's incremental entry `indexChangedSessions` passes
+  the cutoff (`session-indexer.ts:470`), and a fresh cursor would otherwise
+  index a past-window session on a tenant's very first open; `startScopedHistoryBackfill`
+  therefore takes a `retentionCutoff` parameter (7th). (2) `reindexScopedHistory`
+  catches in-pass failures (history.list down, closed DB) into
+  `stats.errors`/`aborted` instead of rejecting — the host-facing method always
+  resolves with stats; only the pre-gate guard rejections (no history port /
+  session-search off) throw. (3) `isWithinRetentionMs` treats NaN as within
+  (the record's R6 wording was "reindex it"; the helper encodes it).
 - `reindexSessions()` calls `gate.run(fullPass, { priority: true })`:
   if a pass is in flight, the reindex **chains after it** (awaits
   `current()` then runs) rather than dropping or cancelling — an explicit
@@ -276,9 +287,14 @@ method, and capabilities gains the boolean (mirroring the
 interface ScopedHermesProviderCapabilities {
   readonly sharedProfile?: boolean;
   readonly dataRetention?: boolean;
-  /** true = honours reindexSessions(): a full one-shot rebuild of the
-   *  per-scope session mirror from ctx.history, retention-guarded. */
-  readonly sessionReindex?: boolean;
+  readonly memoryCompaction?: boolean;  // #12, landed first
+  /** true = honours reindexHistory(): a full one-shot rebuild of the
+   *  per-scope session mirror from ctx.history, retention-guarded.
+   *  NAMED WITH THE HOST VOCABULARY (implemented 2026-11-28 as `historyReindex`,
+   *  not the record's original `sessionReindex` — the host record owns contract
+   *  identifiers; PR #30). The handle method stays `reindexSessions()`; the
+   *  provider port maps it to `reindexHistory()` + MaintenanceResult. */
+  readonly historyReindex?: boolean;
 }
 ```
 

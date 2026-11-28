@@ -43,7 +43,10 @@ import { consolidateViaCompletion } from "./consolidation.js";
 import { runScopedCompaction } from "./compaction.js";
 import { setupScopedReviewFlush, type NudgeMode } from "./review-flush.js";
 import { setupScopedCorrectionDetector } from "./correction.js";
-import { attachScopedSessionIndex, mountScopedSessionSearch, startScopedHistoryBackfill } from "./session-search.js";
+import { attachScopedSessionIndex, mountScopedSessionSearch, startScopedHistoryBackfill, reindexScopedHistory } from "./session-search.js";
+import { createScopedBackfillGate } from "./backfill-gate.js";
+import type { SessionBackfillStats } from "./session-search.js";
+import { retentionCutoffMs } from "../store/session-indexer.js";
 import { runScopedSessionRetention } from "./session-retention.js";
 import { createBackgroundGate } from "./background-gate.js";
 import type { BackgroundGate } from "./background-gate.js";
@@ -220,6 +223,15 @@ export interface ScopedHermesHandle {
    * review/flush/correction holds the shared gate. Design: MEMORY-COMPACT-DESIGN.md.
    */
   compact(): Promise<ScopedCompactionResult>;
+  /**
+   * One-shot FULL reindex of the tenant's session mirror from the host
+   * history port (backlog #18, SESSION-REINDEX-DESIGN.md). Rejects when
+   * session_search is off or no history port was injected; serialized
+   * against the open-time pass via the per-tenant gate; honors
+   * config.sessionRetentionDays at call time — a session touched within the
+   * window becomes retrievable again (re-added), never a past-window one (R2).
+   */
+  reindexSessions(): Promise<SessionBackfillStats>;
   /** Erase this scope; optionally the user's shared profile too. */
   erase(options?: EraseOptions): Promise<void>;
   /** Release the root claim and pinned connections. */
@@ -411,6 +423,11 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
   // Starts after `ready`, not from mount() — a direct user who only calls
   // promptSection() still gets a backfilled mirror. `dbClosed` is set by both
   // dispose() and erase(), so a teardown mid-pass stops cleanly.
+  // #18: one per-tenant gate serializes the open-time incremental pass against
+  // a manual full reindex (SESSION-REINDEX-DESIGN.md §2.3). Constructed even
+  // when the kickoff is not armed, so reindexSessions() shares the same slot
+  // shape (its own guard returns before ever claiming it).
+  const backfillGate = createScopedBackfillGate();
   let currentSessionId: string | null = null;
   if (sessionSearchEnabled && options.history) {
     // #4 retention (P6 design): prune BEFORE backfill starts. Both await `ready`;
@@ -421,7 +438,10 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
     }
     void startScopedHistoryBackfill(
       dbManager, options.history, ready,
-      () => currentSessionId, () => dbClosed,
+      () => currentSessionId, () => dbClosed, backfillGate,
+      // Same guard the manual pass honors (upstream indexChangedSessions
+      // precedent): a fresh cursor must not index past-window sessions.
+      retentionCutoffMs(config.sessionRetentionDays ?? 0),
     );
   }
 
@@ -594,6 +614,29 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
         store,
         isDisposed: () => dbClosed,
       });
+    },
+    async reindexSessions() {
+      // Backlog #18 (SESSION-REINDEX-DESIGN.md §2.2). Guard order mirrors the
+      // kickoff's arming condition above: session_search off or no history
+      // port = nothing to reindex — reject with a stable message rather than
+      // claiming an empty pass (test 6). `ready` first so the mirror exists,
+      // then chain behind any in-flight open pass via the shared gate (R3).
+      const history = options.history;
+      if (!sessionSearchEnabled) throw new Error("SCOPED_REINDEX_NO_SESSION_SEARCH: session search is disabled for this tenant");
+      if (!history) throw new Error("SCOPED_REINDEX_NO_HISTORY_PORT: host injected no history port to reindex from");
+      await ready;
+      // Retention cutoff computed at CALL time, not mount time (record §2.2):
+      // a tenant reconfigured between opens prunes/reindexes against the
+      // window in force now. 0 = retention off = no guard (all listed reindexed).
+      const cutoff = retentionCutoffMs(config.sessionRetentionDays ?? 0);
+      return reindexScopedHistory(
+        dbManager,
+        history,
+        () => currentSessionId,
+        cutoff,
+        backfillGate,
+        () => dbClosed,
+      );
     },
     async erase(eraseOptions?: EraseOptions) {
       // Erasure is a provider-level operation, so its metric belongs here (not
