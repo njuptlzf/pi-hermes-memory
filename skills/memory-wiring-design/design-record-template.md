@@ -94,3 +94,9 @@ Re-check line numbers **after** writing; a stale anchor is a review finding.
 - [ ] §5 time anchors relative, not calendar dates.
 - [ ] §8 every `file:line` re-verified after writing.
 - [ ] New file gets a `divergences.json` row in the same PR (CI gate).
+- [ ] Host-side record read and cross-checked (if one exists or is planned):
+      contract names follow the host record, and every conformance assertion is
+      answerable with "who observes this, on what face" — an assertion naming a
+      host-visible string must have that string's content actually carrying the
+      change (the #12 `promptSection` assertion failed exactly this and was
+      corrected to the capacity face).
