@@ -282,9 +282,14 @@ interface ScopedHermesProviderCapabilities {
 }
 ```
 
-`open()` forwards `reindexSessions: () => tenant.reindexSessions()` in the
-returned session object (`provider.ts:148-159`). `PROVIDER_VERSION` is NOT
-bumped here (that is the release slice's job, AGENTS.md Releasing).
+`open()` forwards `reindexSessions: () => tenant.reindexSessions()` into the
+returned session object (`provider.ts:148-159`). **Shape mapping (cross-check
+2026-11-28):** the handle returns `SessionBackfillStats`, but the host port
+(`记忆维护动作端口设计稿.md` §2.2) declares `MaintenanceResult` — the host record
+owns the port shape, so the provider forward maps it:
+`{ affected: stats.sessionsIndexed, errors: stats.errors, ...(stats.aborted ? { deferred: true } : {}) }`
+(the per-target/processing detail stays on the handle method for direct users).
+`PROVIDER_VERSION` is NOT bumped here (that is the release slice's job, AGENTS.md Releasing).
 
 Host side (agent-chat) — NOT specified beyond this pointer per
 `WIRING-CONTRACT.md` §5: the `MemoryProvider` protocol needs the optional
