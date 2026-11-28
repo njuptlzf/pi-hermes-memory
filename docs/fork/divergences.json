@@ -938,6 +938,16 @@
       "risk": "new",
       "anchors": [],
       "baseBlob": null
+    },
+    {
+      "path": "skills/memory-wiring-design/design-record-template.md",
+      "status": "applied",
+      "surface": "fork-owned agent skill",
+      "change": "Output contract for the skill: required sections of a fork wiring design record, question-to-section map, and completion checklist so every run ends in a design doc",
+      "reason": "Fork-owned support file for the memory-wiring-design skill; never conflicts on merge.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
     }
   ]
 }
