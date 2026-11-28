@@ -216,8 +216,27 @@ interface ScopedHermesProviderCapabilities {
 }
 ```
 
-`open()` forwards `compact: () => tenant.compact()` into `ProviderSession`;
-the capability object adds `memoryCompaction: true`.
+`open()` forwards into `ProviderSession`, mapped to the **host contract shape**
+(`MaintenanceResult` per agent-chat `记忆维护动作端口设计稿.md` §2.2 — the host
+record owns the shape; `compact()`'s richer per-target detail stays on the
+handle method, the provider port narrows it):
+
+```ts
+// provider.ts, inside open():
+compact: async () => {
+  const r = await tenant.compact();
+  return {
+    affected: r.targets.filter((t) => t.consolidated && !t.noop).length,
+    errors: r.targets.flatMap((t) => (t.error && !t.consolidated ? [`${t.target}: ${t.error}`] : [])),
+    ...(r.skipped ? { skipped: true } : {}),
+    ...(r.deferred ? { deferred: true } : {}),
+  };
+},
+```
+
+the capability object adds `memoryCompaction: true`. (Cross-check 2026-11-28:
+without this adapter the two repos' result shapes silently diverge — exactly
+the drift class the cross-repo check step exists to catch.)
 
 ## 3. Impact surface — every file and every caller
 
