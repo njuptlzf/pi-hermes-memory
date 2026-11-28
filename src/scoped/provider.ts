@@ -83,6 +83,17 @@ interface ProviderSession {
   promptSection(): Promise<string>;
   erase(options?: { readonly includeShared?: boolean }): Promise<void>;
   dispose(): Promise<void>;
+  /**
+   * Bounded compaction, mapped to the host's MaintenanceResult shape
+   * (agent-chat memory-provider.ts). The handle's per-target detail stays
+   * on the handle for direct openScopedHermesMemory users.
+   */
+  compact(): Promise<{
+    readonly affected: number;
+    readonly errors: readonly string[];
+    readonly skipped?: boolean;
+    readonly deferred?: boolean;
+  }>;
 }
 
 /**
@@ -103,6 +114,14 @@ export interface ScopedHermesProviderCapabilities {
    * the memory layer's retrievability, not about deleting user history.
    */
   readonly dataRetention?: boolean;
+  /**
+   * true = honours `session.compact()` (MEMORY-COMPACT-DESIGN.md): one call
+   * brings the per-scope memory + failure stores back inside their capacity
+   * goal through the injected completion, or reports honestly. The host-side
+   * port shape is `MaintenanceResult` — provider.ts maps it below; the rich
+   * per-target detail stays on the handle for direct users.
+   */
+  readonly memoryCompaction?: boolean;
 }
 
 export interface ScopedHermesProvider {
@@ -116,7 +135,7 @@ export interface ScopedHermesProvider {
 const provider: ScopedHermesProvider = {
   id: PROVIDER_ID,
   version: PROVIDER_VERSION,
-  capabilities: { sharedProfile: true, dataRetention: true },
+  capabilities: { sharedProfile: true, dataRetention: true, memoryCompaction: true },
   async open(ctx) {
     // Created before validation so a rejected open is still observable with
     // the host's trace id (or a generated one when the host did not supply it).
@@ -148,6 +167,20 @@ const provider: ScopedHermesProvider = {
         promptSection: () => tenant.promptSection(),
         erase: (options) => tenant.erase(options),
         dispose: () => tenant.dispose(),
+        // Host-shape mapping (MEMORY-COMPACT-DESIGN.md §2.4): counts and
+        // status text only — never memory content. affected = targets that
+        // actually did work; skipped/deferred pass through verbatim.
+        compact: async () => {
+          const r = await tenant.compact();
+          return {
+            affected: r.targets.filter((t) => t.consolidated && !t.noop).length,
+            errors: r.targets
+              .filter((t) => !t.consolidated && t.error !== undefined)
+              .map((t) => `${t.target}: ${t.error}`),
+            ...(r.skipped !== undefined ? { skipped: true } : {}),
+            ...(r.deferred ? { deferred: true } : {}),
+          };
+        },
       };
     });
   },
