@@ -78,7 +78,14 @@ Enablement: <config knob / port field / handle method + file:line>
 5. Add a `divergences.json` row for the new file in the same PR.
 6. Add a pointer in `docs/fork/TASKS.md` (status stays 延后/design-only until
    implementation lands).
-7. PR base/head both `njuptlzf/pi-hermes-memory`; `npm run upstream:check:ci`
+7. **Cross-check the host-side record for the same contract** (agent-chat
+   `docs/design/…设计稿.md`, produced by `agentchat-plugin-wiring`): contract
+   identifiers — capability and method names — follow the HOST's naming (this
+   record cites, never renames); re-read every conformance assertion on both
+   sides and ask what the asserting party can actually observe. Naming drift and
+   unverifiable assertions are the two defect classes this step exists to catch
+   (both were caught this way on the #12/#18 pair).
+8. PR base/head both `njuptlzf/pi-hermes-memory`; `npm run upstream:check:ci`
    must be green before merge.
 
 ## References

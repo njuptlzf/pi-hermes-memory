@@ -54,6 +54,14 @@ once #3/#4 land. Before acting on a backlog row, re-verify its rationale against
 current code. Re-checking a queue is the cheapest place to catch a wrong verdict
 before it mis-prioritizes work.
 
+**Re-read the code path the rationale points to, not just the prerequisite
+flags.** "#12: automatic consolidation already covers capacity" was overturned
+by the overflow grace window itself — the store deliberately defers the auto
+path during grace and tells the writer to consolidate manually, which no in-host
+surface can do. A rationale that cites a mechanism must be checked against the
+mechanism's current shape; a rationale whose blockers all landed is not the only
+stale form.
+
 Two historic false-verdict patterns:
 
 - "Host doesn't call it" → invalid blocker; the point of wiring is often to add
