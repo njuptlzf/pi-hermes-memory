@@ -953,8 +953,28 @@
       "path": "docs/fork/MEMORY-COMPACT-DESIGN.md",
       "status": "applied",
       "surface": "fork documentation",
-      "change": "Design record for #18 sibling #12: handle compact() reusing consolidateViaCompletion over memory+failure targets, per-tenant background-gate hoist, within-goal no-op guard, deferred/skipped semantics; R2 one-prompt shrink ceiling with re-call progress stated as mechanism-local",
-      "reason": "Fork-owned file; never conflicts on merge. Written before implementation per UPSTREAM-MAPPING.md section 3.2; design-only — #12 stays 延后 pending the host call surface (agent-chat 记忆维护动作端口设计稿.md slice).",
+      "change": "Design record for #18 sibling #12: handle compact() reusing consolidateViaCompletion over memory+failure targets, per-tenant background-gate hoist, within-goal no-op guard, deferred/skipped semantics; R2 one-prompt shrink ceiling with re-call progress stated as mechanism-local; R7 auto-path gate gap recorded; MaintenanceResult port mapping added by the cross-check pass",
+      "reason": "Fork-owned file; never conflicts on merge. Written before implementation per UPSTREAM-MAPPING.md section 3.2.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "src/scoped/compaction.ts",
+      "status": "applied",
+      "surface": "scoped manual compaction",
+      "change": "runScopedCompaction: one bounded pass over memory+failure via consolidateViaCompletion; skipped without complete, deferred on a busy gate, free no-op within goal, sequential under a single gate claim",
+      "reason": "Fork-owned (MEMORY-COMPACT-DESIGN.md). Upstream's manual surface is forced: inert registerCommand + subprocess child + project target. Design: MEMORY-COMPACT-DESIGN.md §2.",
+      "risk": "new",
+      "anchors": [],
+      "baseBlob": null
+    },
+    {
+      "path": "tests/scoped/compaction.test.ts",
+      "status": "applied",
+      "surface": "scoped compaction tests",
+      "change": "10 cases per MEMORY-COMPACT-DESIGN.md §5: over-goal shrink, within-goal free noop, no-completion skip, deferral, overflow-grace recovery loop (legacy-inject cap), profile untouched, requireShrink mapping, disposed abort, descriptor pin, MaintenanceResult port mapping without content",
+      "reason": "fork-owned coverage for the #12 slice",
       "risk": "new",
       "anchors": [],
       "baseBlob": null

@@ -9,8 +9,9 @@
 > (defines `compact()` + `capabilities.memoryCompaction`; this record follows
 > that platform naming, unlike the #18 record's early `sessionReindex` drift).
 >
-> Status: design-only, not scheduled. Host-side port is designed; the fork
-> handle method below is what the host will call once wired.
+> Status: implemented (§2 landed with the host port slice; see TASKS.md #12).
+> Host-side port is in agent-chat main (`记忆维护动作端口设计稿.md`, PR #30):
+> `compact()` + `capabilities.memoryCompaction` + `requiresMemoryCompaction`.
 
 ## 0. What this buys
 
@@ -278,6 +279,7 @@ rows beyond the fork-owned files. Expected upstream-merge conflict points: **0**
 | R4 | **The overflow-grace contract wording.** The deferral error says "consolidate manually first" — the manual path must actually clear the way for the next `add`. | Compact reduces `capacityUsage` below the cap check, so the next `_add` succeeds regardless of the residual grace timer. Test 5 drives exactly this loop. Grace state itself is not reset (that belongs to the store's own bookkeeping). |
 | R5 | **failure-store consolidation churn.** The failure tier is small and aging; a manual pass over it could rewrite entries with no capacity pressure. | The within-goal no-op gate (fact 6) skips it whenever `capacityUsage("failure") ≤ capacityGoal("failure")`; LLM cost only when actually over goal. |
 | R6 | **Profile ("user") accidentally included.** Upstream's command iterates user; our boundary forbids it (fact 5). | Type-level `CompactionTarget = "memory" | "failure"` — "user" does not compile. Test 6 asserts the user store is untouched. |
+| R7 | **The overflow-triggered auto consolidator does NOT share the gate** (mount closure `entry.ts:548-550` calls `consolidateViaCompletion` directly — predates this slice). A manual `compact()` can therefore run concurrently with an auto pass; each applies its own plan, store-level write atomics hold, but plans built on overlapping snapshots can double-shrink. | Accepted as pre-existing: wrapping the consolidator in the gate would change the auto path's failure semantics (deferred vs attempted) — a behavior change needing its own verdict, not a silent rider. Recorded here; `gate.tryStart()` on the manual side already prevents the two worst interleavings (manual vs review/flush/correction, manual vs manual). |
 
 ## 5. Tests — `tests/scoped/compaction.test.ts`
 

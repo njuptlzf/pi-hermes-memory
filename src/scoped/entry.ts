@@ -40,11 +40,14 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { defaultMemoryConfig } from "../config.js";
 import { consolidateViaCompletion } from "./consolidation.js";
+import { runScopedCompaction } from "./compaction.js";
 import { setupScopedReviewFlush, type NudgeMode } from "./review-flush.js";
 import { setupScopedCorrectionDetector } from "./correction.js";
 import { attachScopedSessionIndex, mountScopedSessionSearch, startScopedHistoryBackfill } from "./session-search.js";
 import { runScopedSessionRetention } from "./session-retention.js";
 import { createBackgroundGate } from "./background-gate.js";
+import type { BackgroundGate } from "./background-gate.js";
+import type { ScopedCompactionResult } from "./compaction.js";
 import type { MemoryCompletion } from "./completion-types.js";
 import type { MemoryHistoryPort } from "./history-types.js";
 import { AtomicLockCoordinator } from "../store/atomic-lock-coordinator.js";
@@ -211,6 +214,12 @@ export interface ScopedHermesHandle {
   promptSection(): Promise<string>;
   /** Attach tools and hooks to a pi instance. Safe to call once per handle. */
   mount(pi: ExtensionAPI): void;
+  /**
+   * One bounded compaction of the tenant's memory + failure stores (backlog
+   * #12). Skipped when no completion was injected; deferred when a background
+   * review/flush/correction holds the shared gate. Design: MEMORY-COMPACT-DESIGN.md.
+   */
+  compact(): Promise<ScopedCompactionResult>;
   /** Erase this scope; optionally the user's shared profile too. */
   erase(options?: EraseOptions): Promise<void>;
   /** Release the root claim and pinned connections. */
@@ -391,6 +400,13 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
       });
     });
 
+  // One slot per tenant for everything that can write through a completion:
+  // review, flush, correction (mounted below) and the manual compact() pass
+  // (#12). Hoisted out of mount() because compact() is legal before mounting —
+  // a promptSection-only host can still ask for a compaction. Same single
+  // instance everywhere, so manual and automatic paths never interleave.
+  const backgroundGate: BackgroundGate = createBackgroundGate();
+
   // Host history port (SESSION-BACKFILL-DESIGN.md): lazy, bounded, best-effort.
   // Starts after `ready`, not from mount() — a direct user who only calls
   // promptSection() still gets a backfilled mirror. `dbClosed` is set by both
@@ -551,7 +567,7 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
         // same injected completion. Off when no capability was injected.
         // Correction detection shares the gate with them: all three can fire
         // around turn_end, and only one may apply memory operations at a time.
-        const backgroundGate = createBackgroundGate();
+        // The gate instance lives in openWithRoots so compact() shares it too.
         setupScopedReviewFlush(pi, {
           store,
           complete,
@@ -565,6 +581,19 @@ function openWithRoots(options: ScopedHermesOptions, roots: ScopedRoots): Scoped
         });
         setupScopedCorrectionDetector(pi, { store, complete, config, gate: backgroundGate });
       }
+    },
+    async compact() {
+      // Legal before mount(): the closure captures the same store/complete/gate
+      // the mount-time consolidator uses (MEMORY-COMPACT-DESIGN.md §2.3).
+      // `ready` first: capacityUsage reads the in-memory entries, and before
+      // the disk load a tenant would falsely measure as an empty, healthy store.
+      await ready;
+      return runScopedCompaction({
+        ...(complete !== undefined ? { complete } : {}),
+        gate: backgroundGate,
+        store,
+        isDisposed: () => dbClosed,
+      });
     },
     async erase(eraseOptions?: EraseOptions) {
       // Erasure is a provider-level operation, so its metric belongs here (not
